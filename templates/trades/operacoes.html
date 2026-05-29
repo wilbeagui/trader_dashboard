@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Operações · Trader{% endblock %}
+{% block nav_operacoes %}active{% endblock %}
+{% block page_title %}Operações{% endblock %}
+
+{% block topbar_meta %}
+  {{ total_operacoes }} resultado{{ total_operacoes|pluralize }}
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Filtros ── -->
+<form method="get" action="">
+  <div class="filter-bar">
+    <div>
+      <label for="data_inicio">De</label>
+      <input type="date" id="data_inicio" name="data_inicio"
+             class="form-control" style="width:150px;"
+             value="{{ data_inicio }}">
+    </div>
+    <div>
+      <label for="data_fim">Até</label>
+      <input type="date" id="data_fim" name="data_fim"
+             class="form-control" style="width:150px;"
+             value="{{ data_fim }}">
+    </div>
+    <div>
+      <label for="instrumento">Instrumento</label>
+      <select id="instrumento" name="instrumento" class="form-select" style="width:140px;">
+        <option value="">Todos</option>
+        {% for ativo in ativos_disponiveis %}
+        <option value="{{ ativo }}" {% if instrumento == ativo %}selected{% endif %}>{{ ativo }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;padding-bottom:0;">
+      <button type="submit" class="btn-filter">
+        <i class="bi bi-funnel"></i> Filtrar
+      </button>
+      <a href="{% url 'trades:operacoes' %}" class="btn-filter-clear">
+        <i class="bi bi-x"></i> Limpar
+      </a>
+    </div>
+  </div>
+</form>
+
+<!-- ── Cards Totalizadores ── -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <div class="card-dash {% if resultado_total >= 0 %}positive{% else %}negative{% endif %}">
+      <div class="card-icon">
+        <i class="bi {% if resultado_total >= 0 %}bi-arrow-up-right{% else %}bi-arrow-down-right{% endif %}"></i>
+      </div>
+      <div class="card-label">Resultado</div>
+      <div class="card-value" style="font-size:20px;">
+        {% if resultado_total >= 0 %}+{% endif %}R$ {{ resultado_total|floatformat:2 }}
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-dash {% if win_rate >= 50 %}positive{% else %}negative{% endif %}">
+      <div class="card-icon"><i class="bi bi-bullseye"></i></div>
+      <div class="card-label">Win Rate</div>
+      <div class="card-value" style="font-size:20px;">{{ win_rate|floatformat:1 }}%</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-dash blue">
+      <div class="card-icon"><i class="bi bi-lightning-charge"></i></div>
+      <div class="card-label">Operações</div>
+      <div class="card-value" style="font-size:20px;">{{ total_operacoes }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-dash neutral">
+      <div class="card-icon"><i class="bi bi-bar-chart-steps"></i></div>
+      <div class="card-label">Wins / Losses</div>
+      <div class="card-value" style="font-size:20px;color:var(--text-primary);">
+        <span style="color:var(--positive);">{{ total_wins }}</span>
+        <span style="font-size:14px;color:var(--border);">/</span>
+        <span style="color:var(--negative);">{{ total_losses }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Tabela de Operações ── -->
+<div class="chart-card" style="padding:0;overflow:hidden;">
+  <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+    <div class="chart-title" style="margin:0;">
+      <i class="bi bi-table"></i> Operações
+      <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:8px;font-family:var(--font-mono);">
+        {{ total_operacoes }} resultado{{ total_operacoes|pluralize }}
+      </span>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="table-dash">
+      <thead>
+        <tr>
+          <th>Data / Hora</th>
+          <th>Ativo</th>
+          <th>Lado</th>
+          <th style="text-align:right;">Qtd</th>
+          <th style="text-align:right;">P. Compra</th>
+          <th style="text-align:right;">P. Venda</th>
+          <th style="text-align:right;">Resultado</th>
+          <th>Tempo</th>
+          <th style="text-align:right;">Acumulado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for op in operacoes %}
+        <tr>
+          <td>{{ op.abertura_local|date:"d/m/Y H:i" }}</td>
+          <td style="font-weight:600;color:var(--text-primary);">{{ op.ativo }}</td>
+          <td>
+            {% if op.lado == 'C' %}
+              <span class="badge-win">COMPRA</span>
+            {% else %}
+              <span class="badge-loss">VENDA</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;">{{ op.qtd_compra }}</td>
+          <td style="text-align:right;">{{ op.preco_compra|floatformat:0 }}</td>
+          <td style="text-align:right;">{{ op.preco_venda|floatformat:0 }}</td>
+          <td style="text-align:right;font-weight:700;">
+            {% if op.resultado_operacao >= 0 %}
+              <span class="val-pos">+{{ op.resultado_operacao|floatformat:2 }}</span>
+            {% else %}
+              <span class="val-neg">{{ op.resultado_operacao|floatformat:2 }}</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--text-muted);">{{ op.tempo_operacao }}</td>
+          <td style="text-align:right;font-weight:600;">
+            {% if op.total_acumulado >= 0 %}
+              <span class="val-pos">{{ op.total_acumulado|floatformat:2 }}</span>
+            {% else %}
+              <span class="val-neg">{{ op.total_acumulado|floatformat:2 }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" style="text-align:center;padding:48px;color:var(--text-muted);">
+            <i class="bi bi-inbox" style="font-size:28px;display:block;margin-bottom:8px;"></i>
+            Nenhuma operação encontrada para o período selecionado.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

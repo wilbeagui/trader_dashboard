@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard · Trader{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block topbar_meta %}
+  {% if data_inicio or data_fim %}
+    <i class="bi bi-funnel-fill" style="color:var(--accent-blue);font-size:11px;margin-right:4px;"></i>
+    {{ data_inicio|default:"início" }} → {{ data_fim|default:"hoje" }}
+  {% else %}
+    Todos os períodos
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Barra de Filtros ── -->
+<form method="get" action="">
+  <div class="filter-bar">
+    <div>
+      <label for="data_inicio">De</label>
+      <input type="date" id="data_inicio" name="data_inicio"
+             class="form-control" style="width:150px;"
+             value="{{ data_inicio }}">
+    </div>
+    <div>
+      <label for="data_fim">Até</label>
+      <input type="date" id="data_fim" name="data_fim"
+             class="form-control" style="width:150px;"
+             value="{{ data_fim }}">
+    </div>
+    <div style="display:flex;gap:8px;padding-bottom:0;">
+      <button type="submit" class="btn-filter">
+        <i class="bi bi-funnel"></i> Filtrar
+      </button>
+      <a href="{% url 'trades:dashboard' %}" class="btn-filter-clear">
+        <i class="bi bi-x"></i> Limpar
+      </a>
+    </div>
+  </div>
+</form>
+
+<!-- ── Cards de Métricas ── -->
+<div class="row g-3 mb-4">
+
+  <!-- Resultado Total -->
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card-dash {% if resultado_total >= 0 %}positive{% else %}negative{% endif %}">
+      <div class="card-icon">
+        <i class="bi {% if resultado_total >= 0 %}bi-arrow-up-right{% else %}bi-arrow-down-right{% endif %}"></i>
+      </div>
+      <div class="card-label">Resultado Total</div>
+      <div class="card-value">
+        {% if resultado_total >= 0 %}+{% endif %}R$ {{ resultado_total|floatformat:2 }}
+      </div>
+      <div class="card-sub">{{ total_operacoes }} operação{{ total_operacoes|pluralize:",ões" }}</div>
+    </div>
+  </div>
+
+  <!-- Win Rate -->
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card-dash {% if win_rate >= 50 %}positive{% else %}negative{% endif %}">
+      <div class="card-icon"><i class="bi bi-bullseye"></i></div>
+      <div class="card-label">Win Rate</div>
+      <div class="card-value">{{ win_rate|floatformat:1 }}%</div>
+      <div class="card-sub">{{ total_wins }} wins · {{ total_losses }} losses</div>
+    </div>
+  </div>
+
+  <!-- Total Operações -->
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card-dash blue">
+      <div class="card-icon"><i class="bi bi-lightning-charge"></i></div>
+      <div class="card-label">Operações</div>
+      <div class="card-value">{{ total_operacoes }}</div>
+      <div class="card-sub">{{ total_sessoes }} dia{{ total_sessoes|pluralize }}  de pregão</div>
+    </div>
+  </div>
+
+  <!-- Wins / Losses -->
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card-dash neutral">
+      <div class="card-icon"><i class="bi bi-bar-chart-steps"></i></div>
+      <div class="card-label">Wins / Losses</div>
+      <div class="card-value" style="color:var(--text-primary);">
+        <span style="color:var(--positive);">{{ total_wins }}</span>
+        <span style="font-size:18px;color:var(--border);">/</span>
+        <span style="color:var(--negative);">{{ total_losses }}</span>
+      </div>
+      <div class="card-sub">
+        Melhor: <span style="color:var(--positive)">R$ {{ melhor_op|floatformat:2 }}</span>
+        · Pior: <span style="color:var(--negative)">R$ {{ pior_op|floatformat:2 }}</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Gráficos — linha 1 ── -->
+<div class="row g-3 mb-3">
+
+  <!-- Curva de Capital -->
+  <div class="col-12 col-xl-8">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="bi bi-graph-up"></i> Curva de Capital
+      </div>
+      {% if grafico_capital %}
+        {{ grafico_capital|safe }}
+      {% else %}
+        <div style="text-align:center;padding:60px;color:var(--text-muted);">
+          <i class="bi bi-bar-chart" style="font-size:32px;"></i>
+          <p style="margin-top:10px;font-size:13px;">Sem dados para o período</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Resultado por Horário -->
+  <div class="col-12 col-xl-4">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="bi bi-clock"></i> Resultado por Horário
+      </div>
+      {% if grafico_horario %}
+        {{ grafico_horario|safe }}
+      {% else %}
+        <div style="text-align:center;padding:60px;color:var(--text-muted);">
+          <i class="bi bi-clock" style="font-size:32px;"></i>
+          <p style="margin-top:10px;font-size:13px;">Sem dados para o período</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Gráficos — linha 2 ── -->
+<div class="row g-3">
+
+  <!-- Resultado por Ativo -->
+  <div class="col-12 col-xl-5">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="bi bi-collection-play"></i> Resultado por Ativo
+      </div>
+      {% if grafico_ativos %}
+        {{ grafico_ativos|safe }}
+      {% else %}
+        <div style="text-align:center;padding:60px;color:var(--text-muted);">
+          <i class="bi bi-pie-chart" style="font-size:32px;"></i>
+          <p style="margin-top:10px;font-size:13px;">Sem dados para o período</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Heat Map Dia × Horário -->
+  <div class="col-12 col-xl-7">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="bi bi-grid-3x3"></i> Heat Map — Dia × Horário
+      </div>
+      {% if grafico_heatmap %}
+        {{ grafico_heatmap|safe }}
+      {% else %}
+        <div style="text-align:center;padding:60px;color:var(--text-muted);">
+          <i class="bi bi-grid" style="font-size:32px;"></i>
+          <p style="margin-top:10px;font-size:13px;">Sem dados para o período</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

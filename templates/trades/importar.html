@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Importar CSV · Trader{% endblock %}
+{% block nav_importar %}active{% endblock %}
+{% block page_title %}Importar CSV{% endblock %}
+
+{% block content %}
+
+<div class="row g-4">
+
+  <!-- Formulário de Upload -->
+  <div class="col-12 col-lg-7">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="bi bi-upload"></i> Enviar arquivo CSV
+      </div>
+
+      {% if resultado %}
+      <div class="alert-dash alert-success" style="margin-bottom:18px;">
+        <i class="bi bi-check-circle-fill"></i>
+        <strong>Importação concluída!</strong>
+        {{ resultado.total_operacoes }} operaç{{ resultado.total_operacoes|pluralize:"ão,ões" }} importada{{ resultado.total_operacoes|pluralize }} em {{ resultado.importado_em }}.
+        {% if resultado.observacao %}<br><small>{{ resultado.observacao }}</small>{% endif %}
+      </div>
+      {% endif %}
+
+      {% if erro %}
+      <div class="alert-dash alert-danger" style="margin-bottom:18px;">
+        <i class="bi bi-x-circle-fill"></i> {{ erro }}
+      </div>
+      {% endif %}
+
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="upload-zone" id="uploadZone"
+             onclick="document.getElementById('csvFile').click()">
+          <i class="bi bi-file-earmark-spreadsheet"></i>
+          <p style="color:var(--text-dim);margin:8px 0 4px;font-size:14px;font-weight:500;">
+            Clique ou arraste o arquivo aqui
+          </p>
+          <p style="color:var(--text-muted);font-size:12px;margin:0;">
+            Formato CSV exportado do Profitchart
+          </p>
+          <span id="fileName" style="display:none;margin-top:12px;font-family:var(--font-mono);font-size:12px;color:var(--accent-blue);"></span>
+        </div>
+
+        <input type="file" id="csvFile" name="arquivo" accept=".csv,.txt"
+               style="display:none;" onchange="showFileName(this)">
+
+        <div style="margin-top:16px;display:flex;gap:10px;align-items:center;">
+          <button type="submit" class="btn-filter" id="submitBtn" disabled>
+            <i class="bi bi-upload"></i> Importar
+          </button>
+          <span style="font-size:12px;color:var(--text-muted);">
+            Selecione um arquivo para habilitar o envio
+          </span>
+        </div>
+      </form>
+    </div>
+
+    <!-- Histórico de importações -->
+    {% if importacoes %}
+    <div class="chart-card" style="margin-top:16px;">
+      <div class="chart-title">
+        <i class="bi bi-clock-history"></i> Histórico de Importações
+      </div>
+      <table class="table-dash" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Arquivo</th>
+            <th>Importado em</th>
+            <th style="text-align:right;">Operações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for imp in importacoes %}
+          <tr>
+            <td style="font-size:12px;">{{ imp.arquivo_nome }}</td>
+            <td>{{ imp.importado_em|date:"d/m/Y H:i" }}</td>
+            <td style="text-align:right;color:var(--accent-blue);">{{ imp.total_operacoes }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Instruções -->
+  <div class="col-12 col-lg-5">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="bi bi-info-circle"></i> Como exportar do Profitchart
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;">
+
+        {% for passo in passos_instrucoes %}
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="
+            min-width:26px; height:26px;
+            background:var(--accent-blue-soft);
+            border:1px solid rgba(56,139,253,.25);
+            border-radius:50%;
+            display:flex; align-items:center; justify-content:center;
+            font-family:var(--font-mono); font-size:11px; font-weight:700;
+            color:var(--accent-blue);
+          ">{{ forloop.counter }}</div>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">
+              {{ passo.titulo }}
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">
+              {{ passo.descricao }}
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="min-width:26px;height:26px;background:var(--accent-blue-soft);border:1px solid rgba(56,139,253,.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent-blue);">1</div>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">Acesse o Profitchart</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">Abra o Profitchart e faça login na sua conta.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="min-width:26px;height:26px;background:var(--accent-blue-soft);border:1px solid rgba(56,139,253,.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent-blue);">2</div>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">Relatório de Operações</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">Vá em <strong style="color:var(--text-dim);">Ferramentas → Relatório de Operações</strong>.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="min-width:26px;height:26px;background:var(--accent-blue-soft);border:1px solid rgba(56,139,253,.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent-blue);">3</div>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">Selecione o período</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">Defina a data de início e fim do período desejado.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="min-width:26px;height:26px;background:var(--accent-blue-soft);border:1px solid rgba(56,139,253,.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent-blue);">4</div>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">Exportar como CSV</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">Clique em <strong style="color:var(--text-dim);">Exportar → CSV</strong> e salve o arquivo.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div style="min-width:26px;height:26px;background:var(--accent-blue-soft);border:1px solid rgba(56,139,253,.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent-blue);">5</div>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:2px;">Importe aqui</div>
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">Envie o arquivo usando o formulário ao lado.</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Aviso de duplicidade -->
+      <div class="alert-dash alert-info" style="margin-top:20px;">
+        <i class="bi bi-shield-check"></i>
+        <strong>Sem duplicatas:</strong> operações já importadas são ignoradas automaticamente.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showFileName(input) {
+  const name = input.files[0]?.name;
+  const label = document.getElementById('fileName');
+  const btn = document.getElementById('submitBtn');
+  if (name) {
+    label.textContent = '📄 ' + name;
+    label.style.display = 'block';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+}
+
+// Drag-and-drop
+const zone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('csvFile');
+
+zone.addEventListener('dragover', e => {
+  e.preventDefault();
+  zone.classList.add('dragover');
+});
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    fileInput.files = dt.files;
+    showFileName(fileInput);
+  }
+});
+</script>
+{% endblock %}
