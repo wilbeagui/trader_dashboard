@@ -198,11 +198,13 @@ Cada trade individual importado do Profitchart.
 - Cores de resultado: #3fb68b (positivo) e #e05c5c (negativo)
 - Agrupamento de ativos futuros por prefixo via dicionário AGRUPAMENTO_ATIVOS:
   WIN, WDO, IND, DOL → 3 caracteres; ativos não listados usam nome completo
-- Curva de capital: uma trace com fill='tozeroy'; cor da linha e do fill é dinâmica
-  (verde se acumulado final positivo, vermelha se negativo)
-  DECISÃO FINAL: colorir por região positivo/negativo foi tentado via duas traces com
-  máscara por sinal, mas a descontinuidade visual na transição do zero foi considerada
-  inaceitável. Manter implementação original com cor única dinâmica.
+- Curva de capital: três traces separados usando numpy para máscaras:
+  1. Área positiva (fill='tozeroy', verde rgba(63,182,139,0.12), line width=0, hoverinfo skip)
+  2. Área negativa (fill='tozeroy', vermelha rgba(224,92,92,0.12), line width=0, hoverinfo skip)
+  3. Linha principal (cor dinâmica: verde se acumulado final >= 0, vermelha se negativo)
+  Requer import numpy as np. Máscaras: np.where(array > 0, array, 0) e np.where(array < 0, array, 0)
+  DECISÃO FINAL: esta abordagem resolve o preenchimento por região sem descontinuidade visual,
+  pois as áreas são calculadas diretamente via numpy (não por interpolação entre pontos)
 - Heat map: colorscale divergente com zmid=0 (centro fixo no zero);
   cor central = #161b22 (fundo do card) → células com valor zero ficam invisíveis,
   evitando falsa impressão de resultado negativo em horários sem negociação
@@ -224,8 +226,8 @@ Cada trade individual importado do Profitchart.
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 - Nunca usar datas com timezone diretamente no Plotly (causa bugs visuais)
 - Sempre usar strftime para converter antes de passar ao Plotly
-- Curva de capital: calcular ymin e ymax e definir range explícito no yaxis
-  para garantir que valores negativos apareçam
+- Curva de capital: requer import numpy as np; usar np.where para gerar as máscaras
+  de área positiva e negativa; calcular ymin/ymax com range explícito no yaxis
 - Heat map: usar zmid=0 no go.Heatmap e cor central #161b22 no colorscale;
   NUNCA usar #1c2330 ou outro tom como cor central (zero ficaria colorido)
 
@@ -264,15 +266,16 @@ Cada trade individual importado do Profitchart.
 - Instrumento: WIN (mini índice) em vários vencimentos
 
 ## Gráficos implementados no Dashboard
-1. Curva de Capital → linha + fill='tozeroy' com cor única dinâmica (verde se
-   acumulado final positivo, vermelha se negativo); range do yaxis explícito
+1. Curva de Capital → três traces: área positiva (verde), área negativa (vermelha) e linha
+   principal com cor dinâmica; máscaras via numpy (np.where); range do yaxis explícito
 2. Resultado por Horário → barras verticais coloridas individualmente por resultado
 3. Resultado por Ativo → barras horizontais agrupadas por instrumento (AGRUPAMENTO_ATIVOS)
 4. Heat map Dia × Horário → colorscale divergente verde/vermelho, zmid=0,
    cor central #161b22 para que células com valor zero fiquem invisíveis
 
 ## Gráficos implementados na página Dia
-1. Curva de Capital intraday → mesma lógica do dashboard, eixo X com HH:MM, markers nos pontos
+1. Curva de Capital intraday → mesma lógica do dashboard com três traces e numpy;
+   eixo X com HH:MM; linha principal com markers nos pontos das operações
 2. Resultado por Horário → barras verticais por HH:MM (não hora cheia como no dashboard)
 3. Análise de Execução → barras horizontais por operação mostrando resultado final (barra),
    MEP (marcador triângulo verde) e MEN (marcador triângulo vermelho); altura dinâmica

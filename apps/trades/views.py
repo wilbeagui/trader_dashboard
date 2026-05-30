@@ -1,4 +1,5 @@
 from __future__ import annotations
+import numpy as np
 
 import json
 
@@ -178,9 +179,10 @@ def _minimo_dia(acumulados: list[float]) -> float:
 # Gráficos
 # ──────────────────────────────────────────────
 
+
 def _grafico_capital(df: pd.DataFrame) -> str:
     """
-    Curva de Capital: linha + área verde/vermelha.
+    Curva de Capital: linha principal + área verde para lucro / vermelha para prejuízo.
 
     Regra crítica:
     - converter datas para string via strftime (sem tz no Plotly)
@@ -192,34 +194,68 @@ def _grafico_capital(df: pd.DataFrame) -> str:
 
     df_sorted = df.sort_values("abertura")
     datas_str = df_sorted["abertura"].dt.strftime("%d/%m %H:%M").tolist()
-    acumulado = df_sorted["total_acumulado"].astype(float).tolist()
+
+    # Converte para array numpy para facilitar o filtro de positivos/negativos
+    acumulado_array = np.array(df_sorted["total_acumulado"].astype(float))
+    acumulado = acumulado_array.tolist()
 
     ymin = min(acumulado) * \
         1.15 if min(acumulado) < 0 else min(acumulado) * 0.85
     ymax = max(acumulado) * \
         1.15 if max(acumulado) > 0 else max(acumulado) * 0.85
+
     # Garante margem mínima
     if ymin == ymax:
         ymin -= 100
         ymax += 100
 
-    # Área abaixo da curva — cor depende do último valor
+    # Criação das máscaras para áreas de preenchimento
+    acumulado_pos = np.where(acumulado_array > 0, acumulado_array, 0).tolist()
+    acumulado_neg = np.where(acumulado_array < 0, acumulado_array, 0).tolist()
+
+    # Mantém a sua lógica para a cor da linha principal
     cor_linha = COR_POSITIVO if acumulado[-1] >= 0 else COR_NEGATIVO
-    cor_fill = "rgba(63,182,139,0.12)" if acumulado[-1] >= 0 else "rgba(224,92,92,0.12)"
 
     fig = go.Figure()
+
+    # 1. TRACE DA ÁREA POSITIVA (Verde)
+    fig.add_trace(go.Scatter(
+        x=datas_str,
+        y=acumulado_pos,
+        mode="lines",
+        fill="tozeroy",
+        fillcolor="rgba(63,182,139,0.12)",  # Seu verde com transparência
+        line=dict(width=0),  # Oculta a linha
+        hoverinfo="skip",  # Ignora o tooltip nesta camada
+        showlegend=False
+    ))
+
+    # 2. TRACE DA ÁREA NEGATIVA (Vermelha)
+    fig.add_trace(go.Scatter(
+        x=datas_str,
+        y=acumulado_neg,
+        mode="lines",
+        fill="tozeroy",
+        fillcolor="rgba(224,92,92,0.12)",  # Seu vermelho com transparência
+        line=dict(width=0),  # Oculta a linha
+        hoverinfo="skip",
+        showlegend=False
+    ))
+
+    # 3. TRACE DA LINHA PRINCIPAL
     fig.add_trace(go.Scatter(
         x=datas_str,
         y=acumulado,
         mode="lines",
         line=dict(color=cor_linha, width=2),
-        fill="tozeroy",
-        fillcolor=cor_fill,
         hovertemplate="<b>%{x}</b><br>Acumulado: R$ %{y:,.2f}<extra></extra>",
+        showlegend=False
     ))
+
     # Linha zero
     fig.add_hline(y=0, line_color=COR_GRADE, line_width=1)
 
+    # Layout base
     fig.update_layout(**_layout_base(
         height=280,
         xaxis=dict(
@@ -237,8 +273,8 @@ def _grafico_capital(df: pd.DataFrame) -> str:
             tickformat=",.0f",
         ),
     ))
-    return _to_html(fig)
 
+    return _to_html(fig)
 
 def _grafico_horario(df: pd.DataFrame) -> str:
     """
@@ -379,6 +415,7 @@ def _grafico_heatmap(df: pd.DataFrame) -> str:
 # Gráficos exclusivos da página de dia
 # ──────────────────────────────────────────────
 
+
 def _grafico_capital_dia(df: pd.DataFrame) -> str:
     """Curva de Capital intraday — idêntica à do dashboard mas com
     horário exato no eixo X (HH:MM em vez de dd/mm HH:MM)."""
@@ -388,7 +425,10 @@ def _grafico_capital_dia(df: pd.DataFrame) -> str:
     df_s = df.sort_values("abertura").reset_index(drop=True)
     # Eixo X: só horário — mais legível para um único dia
     xs = df_s["abertura"].dt.strftime("%H:%M").tolist()
-    ys = df_s["total_acumulado"].astype(float).tolist()
+
+    # Converte para array numpy para aplicar a regra de positivo/negativo
+    ys_array = np.array(df_s["total_acumulado"].astype(float))
+    ys = ys_array.tolist()
 
     ymin = min(ys)
     ymax = max(ys)
@@ -396,19 +436,51 @@ def _grafico_capital_dia(df: pd.DataFrame) -> str:
     ymin -= margem
     ymax += margem
 
+    # Criação das máscaras para áreas de preenchimento
+    ys_pos = np.where(ys_array > 0, ys_array, 0).tolist()
+    ys_neg = np.where(ys_array < 0, ys_array, 0).tolist()
+
+    # Cor da linha e marcadores baseada no saldo final do dia
     cor_linha = COR_POSITIVO if ys[-1] >= 0 else COR_NEGATIVO
-    cor_fill = "rgba(63,182,139,0.12)" if ys[-1] >= 0 else "rgba(224,92,92,0.12)"
 
     fig = go.Figure()
+
+    # 1. TRACE DA ÁREA POSITIVA (Verde)
     fig.add_trace(go.Scatter(
-        x=xs, y=ys,
-        mode="lines+markers",
+        x=xs,
+        y=ys_pos,
+        mode="lines",
+        fill="tozeroy",
+        fillcolor="rgba(63,182,139,0.12)",
+        line=dict(width=0),  # Sem linha ou marcador, apenas preenchimento
+        hoverinfo="skip",
+        showlegend=False
+    ))
+
+    # 2. TRACE DA ÁREA NEGATIVA (Vermelha)
+    fig.add_trace(go.Scatter(
+        x=xs,
+        y=ys_neg,
+        mode="lines",
+        fill="tozeroy",
+        fillcolor="rgba(224,92,92,0.12)",
+        line=dict(width=0),  # Sem linha ou marcador, apenas preenchimento
+        hoverinfo="skip",
+        showlegend=False
+    ))
+
+    # 3. TRACE DA LINHA PRINCIPAL (Com os marcadores)
+    fig.add_trace(go.Scatter(
+        x=xs,
+        y=ys,
+        mode="lines+markers",  # Mantido para destacar as operações do dia
         line=dict(color=cor_linha, width=2),
         marker=dict(size=5, color=cor_linha),
-        fill="tozeroy",
-        fillcolor=cor_fill,
         hovertemplate="<b>%{x}</b><br>Acumulado: R$ %{y:,.2f}<extra></extra>",
+        showlegend=False
     ))
+
+    # Linha zero
     fig.add_hline(y=0, line_color=COR_GRADE, line_width=1)
 
     fig.update_layout(**_layout_base(
@@ -429,7 +501,6 @@ def _grafico_capital_dia(df: pd.DataFrame) -> str:
         ),
     ))
     return _to_html(fig)
-
 
 def _grafico_horario_dia(df: pd.DataFrame) -> str:
     """Resultado por horário (barras) — mesmo padrão do dashboard."""
