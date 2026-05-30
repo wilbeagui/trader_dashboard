@@ -8,6 +8,7 @@
 db.sqlite3
 
 # Arquivos estáticos compilados
+static/
 staticfiles/
 media/
 
