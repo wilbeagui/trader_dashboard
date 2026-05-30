@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import plotly.graph_objects as go
 import pytz
+from django.core.paginator import Paginator
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -390,10 +391,20 @@ def dashboard(request):
 
 def operacoes(request):
     """
-    Tabela de operações com filtros por período e instrumento.
+    Tabela de operações com filtros por período e instrumento + paginação.
     """
     data_inicio, data_fim, qs = _filtrar_operacoes(request)
     instrumento = request.GET.get("instrumento", "").strip()
+    por_pagina = request.GET.get("por_pagina",  "10").strip()
+
+    # Garante que por_pagina seja um inteiro válido dentro das opções aceitas
+    OPCOES_POR_PAGINA = [10, 20, 50, 100]
+    try:
+        por_pagina = int(por_pagina)
+        if por_pagina not in OPCOES_POR_PAGINA:
+            por_pagina = 10
+    except (ValueError, TypeError):
+        por_pagina = 10
 
     if instrumento:
         qs = qs.filter(ativo__startswith=instrumento)
@@ -407,7 +418,7 @@ def operacoes(request):
     )
     ativos_agrupados = sorted({_agrupar_ativo(a) for a in todos_ativos})
 
-    # Uma única chamada .values()
+    # Uma única chamada .values() — mais recente primeiro
     campos = [
         "id", "ativo", "lado", "abertura", "fechamento",
         "tempo_operacao", "qtd_compra", "qtd_venda",
@@ -416,19 +427,13 @@ def operacoes(request):
     ]
     registros = list(qs.order_by("-abertura").values(*campos))
 
-    # Conversão timezone e métricas
-    resultados = []
+    # Métricas totais (sobre todos os registros, não só a página atual)
+    total_operacoes = len(registros)
     total_res = 0.0
     total_wins = 0
     total_losses = 0
 
     for r in registros:
-        abertura_utc = r["abertura"]
-        if abertura_utc and hasattr(abertura_utc, "astimezone"):
-            abertura_local = abertura_utc.astimezone(TZ_BR)
-        else:
-            abertura_local = abertura_utc
-
         res = float(r["resultado_operacao"] or 0)
         total_res += res
         if res > 0:
@@ -436,22 +441,64 @@ def operacoes(request):
         else:
             total_losses += 1
 
-        resultados.append({**r, "abertura_local": abertura_local})
-
-    total_operacoes = len(resultados)
     win_rate = (total_wins / total_operacoes * 100) if total_operacoes else 0.0
+
+    # Conversão de timezone em todos os registros
+    registros_conv = []
+    for r in registros:
+        abertura_utc = r["abertura"]
+        if abertura_utc and hasattr(abertura_utc, "astimezone"):
+            abertura_local = abertura_utc.astimezone(TZ_BR)
+        else:
+            abertura_local = abertura_utc
+        registros_conv.append({**r, "abertura_local": abertura_local})
+
+    # Paginação
+    paginator = Paginator(registros_conv, por_pagina)
+    pagina_num = request.GET.get("pagina", 1)
+    try:
+        pagina_num = int(pagina_num)
+    except (ValueError, TypeError):
+        pagina_num = 1
+
+    pagina_obj = paginator.get_page(pagina_num)
+
+    # Intervalo de páginas exibidas na barra (máximo 5 botões numéricos)
+    num_pages = paginator.num_pages
+    pagina_atual = pagina_obj.number
+    inicio = max(1, pagina_atual - 2)
+    fim = min(num_pages, pagina_atual + 2)
+    # Ajusta para sempre tentar mostrar 5 botões
+    if fim - inicio < 4:
+        if inicio == 1:
+            fim = min(num_pages, inicio + 4)
+        else:
+            inicio = max(1, fim - 4)
+    intervalo_paginas = range(inicio, fim + 1)
+
+    # Parâmetros GET sem 'pagina' (para links de paginação não quebrarem filtros)
+    get_sem_pagina = request.GET.copy()
+    get_sem_pagina.pop("pagina", None)
+    # ex: "data_inicio=2025-11-01&por_pagina=20"
+    query_string = get_sem_pagina.urlencode()
 
     context = {
         "data_inicio":          data_inicio,
         "data_fim":             data_fim,
         "instrumento":          instrumento,
         "ativos_disponiveis":   ativos_agrupados,
-        "operacoes":            resultados,
+        # objeto Page (iterável no template)
+        "operacoes":            pagina_obj,
+        "pagina_obj":           pagina_obj,
+        "intervalo_paginas":    intervalo_paginas,
+        "query_string":         query_string,
         "total_operacoes":      total_operacoes,
         "resultado_total":      round(total_res, 2),
         "total_wins":           total_wins,
         "total_losses":         total_losses,
         "win_rate":             round(win_rate, 1),
+        "por_pagina":           por_pagina,
+        "opcoes_por_pagina":    OPCOES_POR_PAGINA,
     }
     return render(request, "trades/operacoes.html", context)
 

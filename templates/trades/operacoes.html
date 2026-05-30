@@ -8,6 +8,43 @@
   {{ total_operacoes }} resultado{{ total_operacoes|pluralize }}
 {% endblock %}
 
+{% block extra_head %}
+<style>
+  .pag-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    text-decoration: none;
+    transition: border-color .15s, color .15s;
+  }
+  .pag-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+  }
+  .pag-btn.active {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+    font-weight: 700;
+    pointer-events: none;
+  }
+  .pag-btn.disabled {
+    opacity: 0.3;
+    pointer-events: none;
+    cursor: default;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <!-- ── Filtros ── -->
@@ -31,6 +68,14 @@
         <option value="">Todos</option>
         {% for ativo in ativos_disponiveis %}
         <option value="{{ ativo }}" {% if instrumento == ativo %}selected{% endif %}>{{ ativo }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="por_pagina">Por página</label>
+      <select id="por_pagina" name="por_pagina" class="form-select" style="width:90px;">
+        {% for opcao in opcoes_por_pagina %}
+        <option value="{{ opcao }}" {% if por_pagina == opcao %}selected{% endif %}>{{ opcao }}</option>
         {% endfor %}
       </select>
     </div>
@@ -87,15 +132,21 @@
 
 <!-- ── Tabela de Operações ── -->
 <div class="chart-card" style="padding:0;overflow:hidden;">
-  <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
+
+  <!-- Cabeçalho -->
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
     <div class="chart-title" style="margin:0;">
       <i class="bi bi-table"></i> Operações
       <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:8px;font-family:var(--font-mono);">
         {{ total_operacoes }} resultado{{ total_operacoes|pluralize }}
       </span>
     </div>
+    <span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">
+      Página {{ pagina_obj.number }} de {{ pagina_obj.paginator.num_pages }}
+    </span>
   </div>
 
+  <!-- Tabela -->
   <div style="overflow-x:auto;">
     <table class="table-dash">
       <thead>
@@ -153,6 +204,51 @@
       </tbody>
     </table>
   </div>
+
+  <!-- ── Barra de Paginação ── -->
+  {% if pagina_obj.paginator.num_pages > 1 %}
+  <div style="padding:14px 20px;border-top:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">
+
+    <!-- << Primeira -->
+    {% if pagina_obj.has_previous %}
+      <a href="?{{ query_string }}&pagina=1" class="pag-btn" title="Primeira">
+        <i class="bi bi-chevron-double-left"></i>
+      </a>
+      <!-- < Anterior -->
+      <a href="?{{ query_string }}&pagina={{ pagina_obj.previous_page_number }}" class="pag-btn" title="Anterior">
+        <i class="bi bi-chevron-left"></i>
+      </a>
+    {% else %}
+      <span class="pag-btn disabled"><i class="bi bi-chevron-double-left"></i></span>
+      <span class="pag-btn disabled"><i class="bi bi-chevron-left"></i></span>
+    {% endif %}
+
+    <!-- Botões numéricos -->
+    {% for num in intervalo_paginas %}
+      {% if num == pagina_obj.number %}
+        <span class="pag-btn active">{{ num }}</span>
+      {% else %}
+        <a href="?{{ query_string }}&pagina={{ num }}" class="pag-btn">{{ num }}</a>
+      {% endif %}
+    {% endfor %}
+
+    <!-- Próxima > -->
+    {% if pagina_obj.has_next %}
+      <a href="?{{ query_string }}&pagina={{ pagina_obj.next_page_number }}" class="pag-btn" title="Próxima">
+        <i class="bi bi-chevron-right"></i>
+      </a>
+      <!-- Última >> -->
+      <a href="?{{ query_string }}&pagina={{ pagina_obj.paginator.num_pages }}" class="pag-btn" title="Última">
+        <i class="bi bi-chevron-double-right"></i>
+      </a>
+    {% else %}
+      <span class="pag-btn disabled"><i class="bi bi-chevron-right"></i></span>
+      <span class="pag-btn disabled"><i class="bi bi-chevron-double-right"></i></span>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
 </div>
 
 {% endblock %}
