@@ -197,12 +197,7 @@ Cada trade individual importado do Profitchart.
   WIN, WDO, IND, DOL → 3 caracteres; ativos não listados usam nome completo
 - Curva de capital: uma trace com fill='tozeroy'; cor da linha e do fill é dinâmica
   (verde se acumulado final positivo, vermelha se negativo)
-  DECISÃO FINAL: colorir por região positivo/negativo foi tentado via duas traces com
-  máscara por sinal, mas a descontinuidade visual na transição do zero foi considerada
-  inaceitável. Manter implementação original com cor única dinâmica.
-- Heat map: colorscale divergente com zmid=0 (centro fixo no zero);
-  cor central = #161b22 (fundo do card) → células com valor zero ficam invisíveis,
-  evitando falsa impressão de resultado negativo em horários sem negociação
+- Heat map: colorscale divergente centrada no zero (zmid=0), verde/vermelho
 
 ## Regras críticas — OBRIGATÓRIO seguir em qualquer alteração de views.py
 
@@ -223,8 +218,6 @@ Cada trade individual importado do Profitchart.
 - Sempre usar strftime para converter antes de passar ao Plotly
 - Curva de capital: calcular ymin e ymax e definir range explícito no yaxis
   para garantir que valores negativos apareçam
-- Heat map: usar zmid=0 no go.Heatmap e cor central #161b22 no colorscale;
-  NUNCA usar #1c2330 ou outro tom como cor central (zero ficaria colorido)
 
 ### Views
 - NUNCA fazer duas chamadas Operacao.objects.all() na mesma view
@@ -245,14 +238,6 @@ Cada trade individual importado do Profitchart.
 - 15 dias de pregão
 - Período: novembro/2025 até maio/2026
 - Instrumento: WIN (mini índice) em vários vencimentos
-
-## Gráficos implementados no Dashboard
-1. Curva de Capital → linha + fill='tozeroy' com cor única dinâmica (verde se
-   acumulado final positivo, vermelha se negativo); range do yaxis explícito
-2. Resultado por Horário → barras verticais coloridas individualmente por resultado
-3. Resultado por Ativo → barras horizontais agrupadas por instrumento (AGRUPAMENTO_ATIVOS)
-4. Heat map Dia × Horário → colorscale divergente verde/vermelho, zmid=0,
-   cor central #161b22 para que células com valor zero fiquem invisíveis
 
 ## Próximos passos planejados
 - Criar página de análise detalhada por dia de pregão

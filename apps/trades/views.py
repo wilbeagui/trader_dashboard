@@ -275,16 +275,18 @@ def _grafico_ativos(df: pd.DataFrame) -> str:
 def _grafico_heatmap(df: pd.DataFrame) -> str:
     """
     Heat Map Dia × Horário.
-    Eixo X: hora cheia | Eixo Y: dia da semana.
+ 
+    zmid=0 força o centro da escala no zero.
+    Cor central = #161b22 (fundo do card) → células com zero
+    ficam "invisíveis", sem dar falsa impressão de resultado negativo.
     """
     if df.empty:
         return ""
 
     df2 = df.copy()
     df2["hora"] = df2["abertura"].dt.strftime("%H:00")
-    df2["dia_semana"] = df2["abertura"].dt.strftime("%A")  # Monday…
+    df2["dia_semana"] = df2["abertura"].dt.strftime("%A")
 
-    # Ordem dos dias (pt-BR via mapeamento simples)
     DIAS_PT = {
         "Monday":    "Seg",
         "Tuesday":   "Ter",
@@ -300,7 +302,6 @@ def _grafico_heatmap(df: pd.DataFrame) -> str:
         .unstack(fill_value=0)
     )
 
-    # Ordenar dias
     ordem_dias = ["Seg", "Ter", "Qua", "Qui", "Sex"]
     pivot = pivot.reindex([d for d in ordem_dias if d in pivot.index])
 
@@ -308,10 +309,11 @@ def _grafico_heatmap(df: pd.DataFrame) -> str:
         z=pivot.values.tolist(),
         x=pivot.columns.tolist(),
         y=pivot.index.tolist(),
+        zmid=0,                         # ← centro da escala fixo no zero
         colorscale=[
-            [0.0, COR_NEGATIVO],
-            [0.5, "#1c2330"],
-            [1.0, COR_POSITIVO],
+            [0.0, COR_NEGATIVO],        # mínimo → vermelho
+            [0.5, "#161b22"],           # zero   → cor do fundo do card
+            [1.0, COR_POSITIVO],        # máximo → verde
         ],
         hovertemplate="<b>%{y} %{x}</b><br>Resultado: R$ %{z:,.2f}<extra></extra>",
         showscale=True,
