@@ -164,7 +164,7 @@ Cada trade individual importado do Profitchart.
 - `apps/trades/views.py` → 3 views:
   - dashboard() → métricas + 4 gráficos Plotly
   - importar() → upload e processamento do CSV
-  - operacoes() → listagem com filtros por período e instrumento
+  - operacoes() → listagem com filtros por período e instrumento, paginação (10/20/50/100 por página, padrão 10), métricas calculadas sobre o total (não só a página visível)
 - `apps/trades/urls.py` → namespace='trades'; rotas: / (dashboard), /importar/, /operacoes/
 - `apps/trades/services.py` → lógica de importação do CSV do Profitchart
   - converter_decimal() → converte string brasileira para Decimal
@@ -175,7 +175,7 @@ Cada trade individual importado do Profitchart.
 - `templates/base.html` → template base com sidebar fixa, topbar, Bootstrap 5 + Bootstrap Icons, JetBrains Mono + DM Sans, Plotly.js carregado uma vez no head
 - `templates/trades/dashboard.html` → filter bar, 4 cards de métricas, 4 slots de gráficos Plotly
 - `templates/trades/importar.html` → upload com drag-and-drop, histórico de importações, instruções do Profitchart
-- `templates/trades/operacoes.html` → listagem com filtros por período e instrumento, 4 cards totalizadores, tabela com badge WIN/LOSS
+- `templates/trades/operacoes.html` → listagem com filtros por período e instrumento, seletor de itens por página, 4 cards totalizadores, tabela com badge WIN/LOSS, paginação numérica << < 1 2 3 > >>
 - `.env` → variáveis de ambiente (SECRET_KEY, DEBUG)
 - `.gitignore` → arquivos ignorados pelo Git
 
@@ -237,6 +237,12 @@ Cada trade individual importado do Profitchart.
   AGRUPAMENTO_ATIVOS = {'WIN': 3, 'WDO': 3, 'IND': 3, 'DOL': 3}
 - Ativos não listados usam nome completo
 
+### Paginação
+- Usar django.core.paginator.Paginator na view operacoes()
+- Parâmetros GET: pagina (número da página) e por_pagina (10/20/50/100)
+- query_string sem 'pagina' preservado nos links para não quebrar filtros ativos
+- Métricas dos cards calculadas sobre TODOS os registros filtrados, não só a página
+
 ### PowerShell
 - Criar arquivos vazios: New-Item nomedoarquivo (não usar "type nul >")
 
@@ -256,4 +262,3 @@ Cada trade individual importado do Profitchart.
 
 ## Próximos passos planejados
 - Criar página de análise detalhada por dia de pregão
-- Adicionar paginação na listagem de operações
