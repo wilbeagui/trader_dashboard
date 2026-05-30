@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import datetime
 import pandas as pd
 import plotly.graph_objects as go
 import pytz
@@ -130,6 +131,47 @@ def _qs_to_df(qs) -> pd.DataFrame:
     df["ativo_grupo"] = df["ativo"].apply(_agrupar_ativo)
 
     return df
+
+
+# ──────────────────────────────────────────────
+# Helpers de cálculo — usados só na view dia()
+# ──────────────────────────────────────────────
+
+def _calcular_tempo_medio_str(minutos_lista: list[float]) -> str:
+    """Converte lista de minutos em string 'Xh Ym' ou 'Ym Zs'."""
+    if not minutos_lista:
+        return "—"
+    media = sum(minutos_lista) / len(minutos_lista)
+    h = int(media // 60)
+    m = int(media % 60)
+    s = int((media * 60) % 60)
+    if h > 0:
+        return f"{h}h {m}m"
+    if m > 0:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
+def _drawdown_pico(acumulados: list[float]) -> float:
+    """Maior recuo a partir do pico atingido (clássico max drawdown)."""
+    if not acumulados:
+        return 0.0
+    pico = acumulados[0]
+    dd = 0.0
+    for v in acumulados:
+        if v > pico:
+            pico = v
+        recuo = v - pico
+        if recuo < dd:
+            dd = recuo
+    return dd
+
+
+def _minimo_dia(acumulados: list[float]) -> float:
+    """Menor valor abaixo de zero atingido no dia; 0 se nunca negativo."""
+    minimo = min(acumulados) if acumulados else 0.0
+    return minimo if minimo < 0 else 0.0
+
 
 
 # ──────────────────────────────────────────────
@@ -334,6 +376,184 @@ def _grafico_heatmap(df: pd.DataFrame) -> str:
 
 
 # ──────────────────────────────────────────────
+# Gráficos exclusivos da página de dia
+# ──────────────────────────────────────────────
+
+def _grafico_capital_dia(df: pd.DataFrame) -> str:
+    """Curva de Capital intraday — idêntica à do dashboard mas com
+    horário exato no eixo X (HH:MM em vez de dd/mm HH:MM)."""
+    if df.empty:
+        return ""
+
+    df_s = df.sort_values("abertura").reset_index(drop=True)
+    # Eixo X: só horário — mais legível para um único dia
+    xs = df_s["abertura"].dt.strftime("%H:%M").tolist()
+    ys = df_s["total_acumulado"].astype(float).tolist()
+
+    ymin = min(ys)
+    ymax = max(ys)
+    margem = (ymax - ymin) * 0.18 if ymax != ymin else 100
+    ymin -= margem
+    ymax += margem
+
+    cor_linha = COR_POSITIVO if ys[-1] >= 0 else COR_NEGATIVO
+    cor_fill = "rgba(63,182,139,0.12)" if ys[-1] >= 0 else "rgba(224,92,92,0.12)"
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys,
+        mode="lines+markers",
+        line=dict(color=cor_linha, width=2),
+        marker=dict(size=5, color=cor_linha),
+        fill="tozeroy",
+        fillcolor=cor_fill,
+        hovertemplate="<b>%{x}</b><br>Acumulado: R$ %{y:,.2f}<extra></extra>",
+    ))
+    fig.add_hline(y=0, line_color=COR_GRADE, line_width=1)
+
+    fig.update_layout(**_layout_base(
+        height=260,
+        xaxis=dict(
+            type="category",
+            gridcolor=COR_GRADE,
+            showgrid=False,
+            tickangle=-45,
+            tickfont=dict(size=9),
+        ),
+        yaxis=dict(
+            gridcolor=COR_GRADE,
+            zerolinecolor=COR_GRADE,
+            range=[ymin, ymax],
+            tickprefix="R$ ",
+            tickformat=",.0f",
+        ),
+    ))
+    return _to_html(fig)
+
+
+def _grafico_horario_dia(df: pd.DataFrame) -> str:
+    """Resultado por horário (barras) — mesmo padrão do dashboard."""
+    if df.empty:
+        return ""
+
+    df2 = df.copy()
+    df2["hora"] = df2["abertura"].dt.strftime("%H:%M")
+    agrupado = (
+        df2.groupby("hora")["resultado_operacao"]
+        .sum()
+        .reset_index()
+        .sort_values("hora")
+    )
+    cores = [COR_POSITIVO if v >= 0 else COR_NEGATIVO
+             for v in agrupado["resultado_operacao"]]
+
+    fig = go.Figure(go.Bar(
+        x=agrupado["hora"].tolist(),
+        y=agrupado["resultado_operacao"].astype(float).tolist(),
+        marker_color=cores,
+        hovertemplate="<b>%{x}</b><br>Resultado: R$ %{y:,.2f}<extra></extra>",
+    ))
+    fig.update_layout(**_layout_base(
+        height=260,
+        xaxis=dict(type="category", gridcolor=COR_GRADE, showgrid=False,
+                   tickangle=-45, tickfont=dict(size=9)),
+        yaxis=dict(
+            gridcolor=COR_GRADE,
+            zerolinecolor=COR_GRADE,
+            tickprefix="R$ ",
+            tickformat=",.0f",
+        ),
+    ))
+    return _to_html(fig)
+
+
+def _grafico_execucao(df: pd.DataFrame) -> str:
+    """
+    Análise de Execução — MEP × MEN × Resultado por operação.
+ 
+    Cada operação vira uma linha horizontal com 3 elementos:
+      • Barra azul:  do zero até o resultado final (gain ou loss)
+      • Marcador ▲:  MEP (máxima exposição positiva atingida)
+      • Marcador ▼:  MEN (máxima exposição negativa atingida)
+ 
+    Eixo Y: label com horário + ativo.
+    Eixo X: valores em R$.
+    """
+    if df.empty:
+        return ""
+
+    df_s = df.sort_values("abertura").reset_index(drop=True)
+
+    labels = (df_s["abertura"].dt.strftime(
+        "%H:%M") + " " + df_s["ativo"]).tolist()
+    resultados = df_s["resultado_operacao"].astype(float).tolist()
+    meps = df_s["mep"].astype(float).tolist()
+    mens = df_s["men"].astype(float).tolist()
+
+    cores_barra = [COR_POSITIVO if r >=
+                   0 else COR_NEGATIVO for r in resultados]
+
+    fig = go.Figure()
+
+    # Barras do resultado final
+    fig.add_trace(go.Bar(
+        x=resultados,
+        y=labels,
+        orientation="h",
+        marker_color=cores_barra,
+        marker_opacity=0.85,
+        name="Resultado",
+        hovertemplate="<b>%{y}</b><br>Resultado: R$ %{x:,.2f}<extra></extra>",
+    ))
+
+    # MEP — marcador triangular verde
+    fig.add_trace(go.Scatter(
+        x=meps,
+        y=labels,
+        mode="markers",
+        marker=dict(symbol="triangle-right", size=10,
+                    color=COR_POSITIVO, line=dict(width=1, color="#0d1117")),
+        name="MEP",
+        hovertemplate="<b>%{y}</b><br>MEP: R$ %{x:,.2f}<extra></extra>",
+    ))
+
+    # MEN — marcador triangular vermelho
+    fig.add_trace(go.Scatter(
+        x=mens,
+        y=labels,
+        mode="markers",
+        marker=dict(symbol="triangle-left", size=10,
+                    color=COR_NEGATIVO, line=dict(width=1, color="#0d1117")),
+        name="MEN",
+        hovertemplate="<b>%{y}</b><br>MEN: R$ %{x:,.2f}<extra></extra>",
+    ))
+
+    # Altura dinâmica: mínimo 260px, +30px por operação
+    altura = max(260, 80 + len(labels) * 38)
+
+    fig.update_layout(**_layout_base(
+        height=altura,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom", y=1.02,
+            xanchor="right",  x=1,
+            font=dict(size=10, color=COR_TEXTO),
+        ),
+        xaxis=dict(
+            gridcolor=COR_GRADE,
+            zerolinecolor=COR_GRADE,
+            tickprefix="R$ ",
+            tickformat=",.0f",
+        ),
+        yaxis=dict(gridcolor=COR_GRADE, showgrid=False),
+        barmode="overlay",
+    ))
+    return _to_html(fig)
+
+
+
+# ──────────────────────────────────────────────
 # Views
 # ──────────────────────────────────────────────
 
@@ -444,14 +664,29 @@ def operacoes(request):
     win_rate = (total_wins / total_operacoes * 100) if total_operacoes else 0.0
 
     # Conversão de timezone em todos os registros
+
+    registros_cronologicos = list(reversed(registros))
+    acumulado_periodo = 0.0
     registros_conv = []
-    for r in registros:
+
+    for r in registros_cronologicos:
         abertura_utc = r["abertura"]
         if abertura_utc and hasattr(abertura_utc, "astimezone"):
             abertura_local = abertura_utc.astimezone(TZ_BR)
         else:
             abertura_local = abertura_utc
-        registros_conv.append({**r, "abertura_local": abertura_local})
+
+        acumulado_periodo += float(r["resultado_operacao"] or 0)
+
+        registros_conv.append({
+            **r,
+            "abertura_local":  abertura_local,
+            # sobrescreve o do banco
+            "total_acumulado": round(acumulado_periodo, 2),
+        })
+
+    # Reverter para exibição: mais recente primeiro
+    registros_conv = list(reversed(registros_conv))
 
     # Paginação
     paginator = Paginator(registros_conv, por_pagina)
@@ -535,3 +770,167 @@ def importar(request):
         "importacoes": importacoes,
     }
     return render(request, "trades/importar.html", context)
+
+
+# ──────────────────────────────────────────────
+# View Dia
+# ──────────────────────────────────────────────
+
+def dia(request):
+    """
+    Análise detalhada de um dia de pregão.
+    Parâmetro GET: data (YYYY-MM-DD). Se ausente, usa o dia mais recente.
+    """
+    # Todos os dias com operações (para o seletor do sidebar)
+    dias_disponiveis = (
+        Operacao.objects
+        .dates("abertura", "day", order="DESC")   # já converte para date
+    )
+    # Converte para lista de strings YYYY-MM-DD
+    dias_str = [d.strftime("%Y-%m-%d") for d in dias_disponiveis]
+
+    if not dias_str:
+        return render(request, "trades/dia.html", {"sem_dados": True})
+
+    # Data selecionada — padrão: mais recente
+    data_sel = request.GET.get("data", dias_str[0]).strip()
+    if data_sel not in dias_str:
+        data_sel = dias_str[0]
+
+    # Uma única chamada .values() com todos os campos necessários
+    campos = [
+        "id", "ativo", "lado", "abertura", "fechamento",
+        "tempo_operacao", "qtd_compra", "qtd_venda",
+        "preco_compra", "preco_venda", "preco_medio",
+        "resultado_operacao", "total_acumulado",
+        "mep", "men", "ganho_maximo", "perda_maxima",
+    ]
+    qs = (
+        Operacao.objects
+        .filter(abertura__date=data_sel)
+        .order_by("abertura")
+        .values(*campos)
+    )
+    registros = list(qs)
+
+    if not registros:
+        return render(request, "trades/dia.html", {
+            "sem_dados":        False,
+            "dias_disponiveis": dias_str,
+            "data_sel":         data_sel,
+            "sem_ops":          True,
+        })
+
+    # ── DataFrame ──
+    df = pd.DataFrame(registros)
+    df["abertura"] = pd.to_datetime(df["abertura"], utc=True).dt.tz_convert(TZ_BR)
+    df["resultado_operacao"] = df["resultado_operacao"].astype(float)
+
+    # Recalcular acumulado apenas com as operações do dia (ordem cronológica)
+    df = df.sort_values("abertura").reset_index(drop=True)
+    df["total_acumulado"] = df["resultado_operacao"].cumsum()
+
+    df["mep"] = df["mep"].astype(float)
+    df["men"] = df["men"].astype(float)
+
+    # ── KPIs ──
+    total_ops = len(df)
+    resultado = float(df["resultado_operacao"].sum())
+    wins_mask = df["resultado_operacao"] > 0
+    losses_mask = df["resultado_operacao"] <= 0
+    total_wins = int(wins_mask.sum())
+    total_losses = int(losses_mask.sum())
+    win_rate = (total_wins / total_ops * 100) if total_ops else 0.0
+
+    soma_gains = float(df.loc[wins_mask,   "resultado_operacao"].sum())
+    soma_losses = float(df.loc[losses_mask, "resultado_operacao"].sum())
+    fator_lucro = (soma_gains / abs(soma_losses)) if soma_losses != 0 else None
+
+    acumulados = df["total_acumulado"].tolist()
+    drawdown_max = _drawdown_pico(acumulados)
+    exposicao_neg = _minimo_dia(acumulados)
+
+    maior_gain_row = df.loc[df["resultado_operacao"].idxmax()]
+    maior_loss_row = df.loc[df["resultado_operacao"].idxmin()]
+
+    maior_gain = float(maior_gain_row["resultado_operacao"])
+    maior_gain_ativo = maior_gain_row["ativo"]
+    maior_gain_hora = maior_gain_row["abertura"].strftime("%H:%M")
+
+    maior_loss = float(maior_loss_row["resultado_operacao"])
+    maior_loss_ativo = maior_loss_row["ativo"]
+    maior_loss_hora = maior_loss_row["abertura"].strftime("%H:%M")
+
+    # Tempo médio winners / losers (em minutos via fechamento - abertura)
+    df["fechamento_local"] = pd.to_datetime(
+        df["fechamento"], utc=True
+    ).dt.tz_convert(TZ_BR)
+    df["duracao_min"] = (
+        (df["fechamento_local"] - df["abertura"]).dt.total_seconds() / 60
+    )
+
+    mins_winners = df.loc[wins_mask,   "duracao_min"].tolist()
+    mins_losers = df.loc[losses_mask, "duracao_min"].tolist()
+    tempo_medio_win = _calcular_tempo_medio_str(mins_winners)
+    tempo_medio_loss = _calcular_tempo_medio_str(mins_losers)
+
+    # Razão perdedoras/vencedoras
+    if mins_winners and mins_losers:
+        media_w = sum(mins_winners) / len(mins_winners)
+        media_l = sum(mins_losers) / len(mins_losers)
+        razao = round(media_l / media_w, 1) if media_w else None
+    else:
+        razao = None
+
+    tabela = []
+    for _, row in df.iterrows():
+        tabela.append({
+            "ativo":              row["ativo"],
+            "lado":               row["lado"],
+            # já convertido para BRT no df
+            "abertura_local":     row["abertura"],
+            "qtd_compra":         row["qtd_compra"],
+            "preco_compra":       row["preco_compra"],
+            "preco_venda":        row["preco_venda"],
+            "mep":                row["mep"],
+            "men":                row["men"],
+            "resultado_operacao": row["resultado_operacao"],
+            "tempo_operacao":     row["tempo_operacao"],
+            "total_acumulado":    row["total_acumulado"],  # recalculado
+        })
+
+
+    context = {
+        "sem_dados":         False,
+        "sem_ops":           False,
+        "dias_disponiveis":  dias_str,
+        "data_sel":          data_sel,
+        # KPIs linha 1
+        "resultado_total":   round(resultado, 2),
+        "win_rate":          round(win_rate, 1),
+        "total_ops":         total_ops,
+        # KPIs linha 2
+        "fator_lucro":       round(fator_lucro, 2) if fator_lucro else None,
+        "drawdown_max":      round(drawdown_max, 2),
+        "exposicao_neg":     round(exposicao_neg, 2),
+        # KPIs linha 3
+        "maior_gain":        round(maior_gain, 2),
+        "maior_gain_ativo":  maior_gain_ativo,
+        "maior_gain_hora":   maior_gain_hora,
+        "maior_loss":        round(maior_loss, 2),
+        "maior_loss_ativo":  maior_loss_ativo,
+        "maior_loss_hora":   maior_loss_hora,
+        # KPIs linha 4
+        "tempo_medio_win":   tempo_medio_win,
+        "tempo_medio_loss":  tempo_medio_loss,
+        "razao_tempo":       razao,
+        "total_wins":        total_wins,
+        "total_losses":      total_losses,
+        # Gráficos
+        "grafico_capital":   _grafico_capital_dia(df),
+        "grafico_horario":   _grafico_horario_dia(df),
+        "grafico_execucao":  _grafico_execucao(df),
+        # Tabela
+        "operacoes":         tabela,
+    }
+    return render(request, "trades/dia.html", context)

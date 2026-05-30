@@ -421,20 +421,32 @@
     </div>
   </div>
 
-  <div class="sidebar-nav">
-    <div class="nav-section-label">Análise</div>
-    <a href="{% url 'trades:dashboard' %}" class="nav-link {% block nav_dashboard %}{% endblock %}">
-      <i class="bi bi-speedometer2"></i> Dashboard
-    </a>
-    <a href="{% url 'trades:operacoes' %}" class="nav-link {% block nav_operacoes %}{% endblock %}">
-      <i class="bi bi-table"></i> Operações
-    </a>
-
-    <div class="nav-section-label" style="margin-top:12px;">Sistema</div>
-    <a href="{% url 'trades:importar' %}" class="nav-link {% block nav_importar %}{% endblock %}">
-      <i class="bi bi-upload"></i> Importar CSV
-    </a>
-  </div>
+   <div class="sidebar-nav">
+      <div class="nav-section-label">Análise</div>
+      <a href="{% url 'trades:dashboard' %}" class="nav-link {% block nav_dashboard %}{% endblock %}">
+        <i class="bi bi-speedometer2"></i> Dashboard
+      </a>
+      <a href="{% url 'trades:operacoes' %}" class="nav-link {% block nav_operacoes %}{% endblock %}">
+        <i class="bi bi-table"></i> Operações
+      </a>
+ 
+      <!-- Análise do Dia com seletor inline -->
+      <div style="margin-bottom:2px;">
+        <a href="{% url 'trades:dia' %}" class="nav-link {% block nav_dia %}{% endblock %}"
+           style="justify-content:space-between;">
+          <span><i class="bi bi-calendar-day"></i> Análise do Dia</span>
+          <i class="bi bi-chevron-right" style="font-size:10px;opacity:.5;"></i>
+        </a>
+ 
+        <!-- Seletor de data — aparece sempre que a página ativa for 'dia' -->
+        {% block nav_dia_seletor %}{% endblock %}
+      </div>
+ 
+      <div class="nav-section-label" style="margin-top:12px;">Sistema</div>
+      <a href="{% url 'trades:importar' %}" class="nav-link {% block nav_importar %}{% endblock %}">
+        <i class="bi bi-upload"></i> Importar CSV
+      </a>
+    </div>
 
   <div class="sidebar-footer">
     <span class="status-dot"></span>SQLite · dev

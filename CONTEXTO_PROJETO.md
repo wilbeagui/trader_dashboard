@@ -73,6 +73,7 @@ trader_dashboard/
 │   ├── base.html
 │   └── trades/
 │       ├── dashboard.html
+│       ├── dia.html
 │       ├── importar.html
 │       └── operacoes.html
 ├── .env
@@ -161,19 +162,21 @@ Cada trade individual importado do Profitchart.
 - `apps/trades/models.py` → 3 models: ImportacaoArquivo, SessaoOperacao, Operacao
 - `apps/trades/migrations/0001_initial.py` → migração inicial
 - `apps/trades/admin.py` → registra os 3 models no Django Admin
-- `apps/trades/views.py` → 3 views:
+- `apps/trades/views.py` → 4 views:
   - dashboard() → métricas + 4 gráficos Plotly
   - importar() → upload e processamento do CSV
-  - operacoes() → listagem com filtros por período e instrumento, paginação (10/20/50/100 por página, padrão 10), métricas calculadas sobre o total (não só a página visível)
-- `apps/trades/urls.py` → namespace='trades'; rotas: / (dashboard), /importar/, /operacoes/
+  - operacoes() → listagem com filtros por período e instrumento, paginação (10/20/50/100 por página, padrão 10), métricas calculadas sobre o total (não só a página visível), acumulado recalculado pelo período filtrado
+  - dia() → análise detalhada de um dia de pregão: 10 KPIs, 3 gráficos (curva intraday, barras por horário, execução MEP/MEN), tabela do dia; acumulado recalculado via cumsum() apenas do dia
+- `apps/trades/urls.py` → namespace='trades'; rotas: / (dashboard), /importar/, /operacoes/, /dia/
 - `apps/trades/services.py` → lógica de importação do CSV do Profitchart
   - converter_decimal() → converte string brasileira para Decimal
   - converter_datetime() → converte string para datetime com pytz
   - converter_bool_medio() → converte campo Médio para booleano
   - converter_tet() → trata campo TET (Tempo Entre Trades)
   - importar_csv() → função principal de importação
-- `templates/base.html` → template base com sidebar fixa, topbar, Bootstrap 5 + Bootstrap Icons, JetBrains Mono + DM Sans, Plotly.js carregado uma vez no head
+- `templates/base.html` → template base com sidebar fixa, topbar, Bootstrap 5 + Bootstrap Icons, JetBrains Mono + DM Sans, Plotly.js carregado uma vez no head; sidebar contém bloco nav_dia_seletor para exibir seletor de data na página dia
 - `templates/trades/dashboard.html` → filter bar, 4 cards de métricas, 4 slots de gráficos Plotly
+- `templates/trades/dia.html` → análise detalhada do dia: 10 KPIs em 3 linhas, curva de capital intraday, resultado por horário, gráfico de execução MEP/MEN, tabela completa do dia; seletor de data exibido no sidebar via bloco nav_dia_seletor
 - `templates/trades/importar.html` → upload com drag-and-drop, histórico de importações, instruções do Profitchart
 - `templates/trades/operacoes.html` → listagem com filtros por período e instrumento, seletor de itens por página, 4 cards totalizadores, tabela com badge WIN/LOSS, paginação numérica << < 1 2 3 > >>
 - `.env` → variáveis de ambiente (SECRET_KEY, DEBUG)
@@ -243,6 +246,14 @@ Cada trade individual importado do Profitchart.
 - query_string sem 'pagina' preservado nos links para não quebrar filtros ativos
 - Métricas dos cards calculadas sobre TODOS os registros filtrados, não só a página
 
+### Acumulado
+- O campo total_acumulado do banco reflete o histórico completo desde a primeira operação
+- NUNCA usar total_acumulado do banco diretamente em páginas filtradas por período ou dia
+- Em operacoes(): recalcular via soma progressiva sobre os registros do período, na ordem
+  cronológica, sobrescrevendo o valor do banco antes de exibir
+- Em dia(): recalcular via df['total_acumulado'] = df['resultado_operacao'].cumsum()
+  após ordenar o DataFrame por abertura; montar a tabela a partir do DataFrame corrigido
+
 ### PowerShell
 - Criar arquivos vazios: New-Item nomedoarquivo (não usar "type nul >")
 
@@ -260,5 +271,12 @@ Cada trade individual importado do Profitchart.
 4. Heat map Dia × Horário → colorscale divergente verde/vermelho, zmid=0,
    cor central #161b22 para que células com valor zero fiquem invisíveis
 
+## Gráficos implementados na página Dia
+1. Curva de Capital intraday → mesma lógica do dashboard, eixo X com HH:MM, markers nos pontos
+2. Resultado por Horário → barras verticais por HH:MM (não hora cheia como no dashboard)
+3. Análise de Execução → barras horizontais por operação mostrando resultado final (barra),
+   MEP (marcador triângulo verde) e MEN (marcador triângulo vermelho); altura dinâmica
+
 ## Próximos passos planejados
-- Criar página de análise detalhada por dia de pregão
+- Indicadores comportamentais (revenge trading, disciplina)
+- Relatório exportável em PDF

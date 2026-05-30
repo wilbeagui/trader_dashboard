@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}Dia · Trader{% endblock %}
+{% block nav_dia %}active{% endblock %}
+
+{% block nav_dia_seletor %}
+<div style="padding: 4px 10px 8px;">
+  <form method="get" action="{% url 'trades:dia' %}">
+    <select
+      name="data"
+      onchange="this.form.submit()"
+      style="
+        width: 100%;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 6px 8px;
+        cursor: pointer;
+        outline: none;
+      "
+    >
+      {% for d in dias_disponiveis %}
+      <option value="{{ d }}" {% if d == data_sel %}selected{% endif %}>
+        {{ d }}
+      </option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+{% endblock %}
+
+{% block page_title %}Análise do Dia{% endblock %}
+
+{% block topbar_meta %}
+  {% if not sem_dados %}{{ data_sel }}{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Cards de KPI compactos */
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card .kpi-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .kpi-card .kpi-value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.1;
+  }
+  .kpi-card .kpi-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-family: var(--font-mono);
+  }
+  .kpi-card .kpi-icon {
+    position: absolute;
+    top: 14px; right: 14px;
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .kpi-card.pos .kpi-value { color: var(--positive); }
+  .kpi-card.neg .kpi-value { color: var(--negative); }
+  .kpi-card.pos .kpi-icon  { background: var(--positive-soft); color: var(--positive); }
+  .kpi-card.neg .kpi-icon  { background: var(--negative-soft); color: var(--negative); }
+  .kpi-card.blue .kpi-icon { background: var(--accent-blue-soft); color: var(--accent-blue); }
+  .kpi-card.warn .kpi-icon { background: rgba(227,179,65,.1); color: var(--warning); }
+
+  /* Legenda execução */
+  .exec-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .exec-legend span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if sem_dados %}
+  <div style="text-align:center;padding:80px;color:var(--text-muted);">
+    <i class="bi bi-inbox" style="font-size:40px;display:block;margin-bottom:12px;"></i>
+    <p>Nenhuma operação importada ainda.</p>
+    <a href="{% url 'trades:importar' %}" class="btn-filter" style="display:inline-flex;gap:6px;">
+      <i class="bi bi-upload"></i> Importar CSV
+    </a>
+  </div>
+
+{% elif sem_ops %}
+  <div style="text-align:center;padding:80px;color:var(--text-muted);">
+    <i class="bi bi-calendar-x" style="font-size:40px;display:block;margin-bottom:12px;"></i>
+    <p>Nenhuma operação encontrada para <strong style="color:var(--text-dim);">{{ data_sel }}</strong>.</p>
+  </div>
+
+{% else %}
+
+<!-- ══ KPIs — Linha 1: resultado principal ══ -->
+<div class="row g-3 mb-3">
+
+  <!-- Resultado Total -->
+  <div class="col-6 col-xl-4">
+    <div class="kpi-card {% if resultado_total >= 0 %}pos{% else %}neg{% endif %}">
+      <div class="kpi-icon">
+        <i class="bi {% if resultado_total >= 0 %}bi-arrow-up-right{% else %}bi-arrow-down-right{% endif %}"></i>
+      </div>
+      <div class="kpi-label">Resultado Total</div>
+      <div class="kpi-value">
+        {% if resultado_total >= 0 %}+{% endif %}R$ {{ resultado_total|floatformat:2 }}
+      </div>
+      <div class="kpi-sub">{{ total_ops }} operaç{{ total_ops|pluralize:"ão,ões" }}</div>
+    </div>
+  </div>
+
+  <!-- Win Rate -->
+  <div class="col-6 col-xl-4">
+    <div class="kpi-card {% if win_rate >= 50 %}pos{% else %}neg{% endif %}">
+      <div class="kpi-icon"><i class="bi bi-bullseye"></i></div>
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value">{{ win_rate|floatformat:1 }}%</div>
+      <div class="kpi-sub">{{ total_wins }}W · {{ total_losses }}L</div>
+    </div>
+  </div>
+
+  <!-- Fator de Lucro -->
+  <div class="col-6 col-xl-4">
+    <div class="kpi-card {% if fator_lucro and fator_lucro >= 1 %}pos{% elif fator_lucro %}neg{% else %}blue{% endif %}">
+      <div class="kpi-icon"><i class="bi bi-calculator"></i></div>
+      <div class="kpi-label">Fator de Lucro</div>
+      <div class="kpi-value">
+        {% if fator_lucro %}{{ fator_lucro|floatformat:2 }}{% else %}—{% endif %}
+      </div>
+      <div class="kpi-sub">gains ÷ |losses|</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ KPIs — Linha 2: risco ══ -->
+<div class="row g-3 mb-3">
+
+  <!-- Drawdown Máximo -->
+  <div class="col-6 col-xl-4">
+    <div class="kpi-card {% if drawdown_max < 0 %}neg{% else %}blue{% endif %}">
+      <div class="kpi-icon"><i class="bi bi-graph-down"></i></div>
+      <div class="kpi-label">Drawdown Máximo</div>
+      <div class="kpi-value">
+        {% if drawdown_max < 0 %}R$ {{ drawdown_max|floatformat:2 }}{% else %}—{% endif %}
+      </div>
+      <div class="kpi-sub">recuo a partir do pico</div>
+    </div>
+  </div>
+
+  <!-- Máxima Exposição Negativa -->
+  <div class="col-6 col-xl-4">
+    <div class="kpi-card {% if exposicao_neg < 0 %}neg{% else %}blue{% endif %}">
+      <div class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></div>
+      <div class="kpi-label">Máx. Exposição Negativa</div>
+      <div class="kpi-value">
+        {% if exposicao_neg < 0 %}R$ {{ exposicao_neg|floatformat:2 }}{% else %}R$ 0,00{% endif %}
+      </div>
+      <div class="kpi-sub">pior momento abaixo do zero</div>
+    </div>
+  </div>
+
+  <!-- Qtd Operações -->
+  <div class="col-6 col-xl-4">
+    <div class="kpi-card blue">
+      <div class="kpi-icon"><i class="bi bi-lightning-charge"></i></div>
+      <div class="kpi-label">Operações</div>
+      <div class="kpi-value">{{ total_ops }}</div>
+      <div class="kpi-sub">
+        <span style="color:var(--positive);">{{ total_wins }} wins</span>
+        ·
+        <span style="color:var(--negative);">{{ total_losses }} losses</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ KPIs — Linha 3: destaques ══ -->
+<div class="row g-3 mb-3">
+
+  <!-- Maior Gain -->
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card pos">
+      <div class="kpi-icon"><i class="bi bi-trophy"></i></div>
+      <div class="kpi-label">Maior Gain</div>
+      <div class="kpi-value">+R$ {{ maior_gain|floatformat:2 }}</div>
+      <div class="kpi-sub">{{ maior_gain_ativo }} · {{ maior_gain_hora }}</div>
+    </div>
+  </div>
+
+  <!-- Maior Loss -->
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card neg">
+      <div class="kpi-icon"><i class="bi bi-heartbreak"></i></div>
+      <div class="kpi-label">Maior Loss</div>
+      <div class="kpi-value">R$ {{ maior_loss|floatformat:2 }}</div>
+      <div class="kpi-sub">{{ maior_loss_ativo }} · {{ maior_loss_hora }}</div>
+    </div>
+  </div>
+
+  <!-- Tempo médio vencedoras -->
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card pos">
+      <div class="kpi-icon"><i class="bi bi-stopwatch"></i></div>
+      <div class="kpi-label">Tempo Médio Winners</div>
+      <div class="kpi-value" style="font-size:18px;">{{ tempo_medio_win }}</div>
+      <div class="kpi-sub">duração média das vencedoras</div>
+    </div>
+  </div>
+
+  <!-- Tempo médio perdedoras -->
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card neg">
+      <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+      <div class="kpi-label">Tempo Médio Losers</div>
+      <div class="kpi-value" style="font-size:18px;">{{ tempo_medio_loss }}</div>
+      <div class="kpi-sub">
+        {% if razao_tempo %}
+          {{ razao_tempo }}× mais que as vencedoras
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ Curva de Capital ══ -->
+<div class="chart-card mb-3">
+  <div class="chart-title">
+    <i class="bi bi-graph-up"></i> Curva de Capital — {{ data_sel }}
+  </div>
+  {% if grafico_capital %}
+    {{ grafico_capital|safe }}
+  {% else %}
+    <div style="text-align:center;padding:40px;color:var(--text-muted);">Sem dados</div>
+  {% endif %}
+</div>
+
+<!-- ══ Horário + Execução ══ -->
+<div class="row g-3 mb-3">
+
+  <!-- Resultado por Horário -->
+  <div class="col-12 col-xl-5">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="bi bi-clock"></i> Resultado por Horário
+      </div>
+      {% if grafico_horario %}
+        {{ grafico_horario|safe }}
+      {% else %}
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">Sem dados</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Análise de Execução -->
+  <div class="col-12 col-xl-7">
+    <div class="chart-card">
+      <div class="chart-title">
+        <i class="bi bi-crosshair"></i> Análise de Execução — MEP / MEN / Resultado
+      </div>
+      <!-- Legenda manual -->
+      <div class="exec-legend">
+        <span><span class="dot" style="background:var(--positive);"></span> Resultado / MEP</span>
+        <span><span class="dot" style="background:var(--negative);"></span> Resultado / MEN</span>
+        <span style="color:var(--accent-blue);">▶ MEP &nbsp; ◀ MEN</span>
+      </div>
+      {% if grafico_execucao %}
+        {{ grafico_execucao|safe }}
+      {% else %}
+        <div style="text-align:center;padding:40px;color:var(--text-muted);">Sem dados</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ Tabela de Operações do Dia ══ -->
+<div class="chart-card" style="padding:0;overflow:hidden;">
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border);">
+    <div class="chart-title" style="margin:0;">
+      <i class="bi bi-table"></i> Operações do Dia
+      <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:8px;font-family:var(--font-mono);">
+        {{ total_ops }} operaç{{ total_ops|pluralize:"ão,ões" }}
+      </span>
+    </div>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="table-dash">
+      <thead>
+        <tr>
+          <th>Horário</th>
+          <th>Ativo</th>
+          <th>Lado</th>
+          <th style="text-align:right;">Qtd</th>
+          <th style="text-align:right;">P. Compra</th>
+          <th style="text-align:right;">P. Venda</th>
+          <th style="text-align:right;">MEP</th>
+          <th style="text-align:right;">MEN</th>
+          <th style="text-align:right;">Resultado</th>
+          <th>Duração</th>
+          <th style="text-align:right;">Acumulado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for op in operacoes %}
+        <tr>
+          <td>{{ op.abertura_local|date:"H:i" }}</td>
+          <td style="font-weight:600;color:var(--text-primary);">{{ op.ativo }}</td>
+          <td>
+            {% if op.lado == 'C' %}
+              <span class="badge-win">COMPRA</span>
+            {% else %}
+              <span class="badge-loss">VENDA</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;">{{ op.qtd_compra }}</td>
+          <td style="text-align:right;">{{ op.preco_compra|floatformat:0 }}</td>
+          <td style="text-align:right;">{{ op.preco_venda|floatformat:0 }}</td>
+          <td style="text-align:right;color:var(--positive);">+{{ op.mep|floatformat:2 }}</td>
+          <td style="text-align:right;color:var(--negative);">{{ op.men|floatformat:2 }}</td>
+          <td style="text-align:right;font-weight:700;">
+            {% if op.resultado_operacao >= 0 %}
+              <span class="val-pos">+{{ op.resultado_operacao|floatformat:2 }}</span>
+            {% else %}
+              <span class="val-neg">{{ op.resultado_operacao|floatformat:2 }}</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--text-muted);">{{ op.tempo_operacao }}</td>
+          <td style="text-align:right;font-weight:600;">
+            {% if op.total_acumulado >= 0 %}
+              <span class="val-pos">{{ op.total_acumulado|floatformat:2 }}</span>
+            {% else %}
+              <span class="val-neg">{{ op.total_acumulado|floatformat:2 }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
