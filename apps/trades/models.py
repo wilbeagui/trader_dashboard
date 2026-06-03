@@ -1,6 +1,5 @@
 from django.db import models
 
-# Create your models here.
 
 class ImportacaoArquivo(models.Model):
     """Controla cada arquivo CSV importado do Profitchart."""
@@ -123,7 +122,10 @@ class Operacao(models.Model):
         ordering = ['abertura']
 
     def __str__(self):
-        return f'{self.ativo} {self.get_lado_display()} — {self.abertura:%d/%m/%Y %H:%M} — R$ {self.resultado_operacao}'
+        return (
+            f'{self.ativo} {self.get_lado_display()} — '
+            f'{self.abertura:%d/%m/%Y %H:%M} — R$ {self.resultado_operacao}'
+        )
 
     @property
     def is_win(self):
@@ -133,3 +135,62 @@ class Operacao(models.Model):
     def duracao_minutos(self):
         delta = self.fechamento - self.abertura
         return round(delta.total_seconds() / 60, 1)
+
+
+class ParametrosTrader(models.Model):
+    """
+    Configuração singleton do trader.
+
+    Garante uma única instância via pk=1 forçado no save().
+    Editável via Django Admin.
+
+    Migração futura para multi-usuário:
+      1. Adicionar: usuario = models.OneToOneField(User, on_delete=models.CASCADE)
+      2. Trocar carregar() por: get(usuario=request.user)
+      3. Criar página de configurações para o usuário editar os próprios parâmetros.
+    """
+
+    # ── Revenge Trading ────────────────────────────────────────────
+    tempo_minimo_entre_trades = models.IntegerField(
+        default=2,
+        verbose_name='Tempo mínimo entre trades (min)',
+        help_text=(
+            'Operação aberta em menos deste tempo após um loss '
+            'é marcada como suspeita de revenge trading.'
+        ),
+    )
+
+    # ── Overtrading ────────────────────────────────────────────────
+    max_operacoes_dia = models.IntegerField(
+        default=5,
+        verbose_name='Máximo de operações por dia',
+        help_text=(
+            'Dias com mais operações que este valor são '
+            'sinalizados como possível overtrading.'
+        ),
+    )
+
+    class Meta:
+        verbose_name = 'Parâmetros do Trader'
+        verbose_name_plural = 'Parâmetros do Trader'
+
+    def __str__(self):
+        return (
+            f'Parâmetros: revenge < {self.tempo_minimo_entre_trades}min · '
+            f'overtrading > {self.max_operacoes_dia} ops/dia'
+        )
+
+    def save(self, *args, **kwargs):
+        """Força singleton: sempre salva com pk=1."""
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Impede exclusão do singleton pelo Admin."""
+        pass
+
+    @classmethod
+    def carregar(cls):
+        """Retorna a instância singleton, criando com defaults se não existir."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

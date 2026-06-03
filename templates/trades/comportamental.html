@@ -1,0 +1,706 @@
+{% extends "base.html" %}
+
+{% block title %}Comportamental · Trader{% endblock %}
+{% block nav_comportamental %}active{% endblock %}
+{% block page_title %}Indicadores Comportamentais{% endblock %}
+
+{% block topbar_meta %}
+  {% if data_inicio or data_fim %}
+    <i class="bi bi-funnel-fill" style="color:var(--accent-blue);font-size:11px;margin-right:4px;"></i>
+    {{ data_inicio|default:"início" }} → {{ data_fim|default:"hoje" }}
+  {% else %}
+    Todos os períodos
+  {% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card .kpi-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .kpi-card .kpi-value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.1;
+  }
+  .kpi-card .kpi-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-family: var(--font-mono);
+  }
+  .kpi-card .kpi-icon {
+    position: absolute;
+    top: 14px; right: 14px;
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .kpi-card.pos  .kpi-value { color: var(--positive); }
+  .kpi-card.neg  .kpi-value { color: var(--negative); }
+  .kpi-card.warn .kpi-value { color: var(--warning);  }
+  .kpi-card.pos  .kpi-icon  { background: var(--positive-soft);     color: var(--positive); }
+  .kpi-card.neg  .kpi-icon  { background: var(--negative-soft);     color: var(--negative); }
+  .kpi-card.blue .kpi-icon  { background: var(--accent-blue-soft);  color: var(--accent-blue); }
+  .kpi-card.warn .kpi-icon  { background: rgba(227,179,65,.1);      color: var(--warning); }
+
+  /* Seção de indicador */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-header .section-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .section-header .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .section-header .section-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    margin-top: 1px;
+  }
+  .section-header .limiar-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+
+  /* Tabela mini dentro dos cards */
+  .mini-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-family: var(--font-mono);
+  }
+  .mini-table th {
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  .mini-table td {
+    padding: 6px 8px;
+    color: var(--text-dim);
+    border-bottom: 1px solid rgba(48,54,61,0.4);
+  }
+  .mini-table tr:last-child td { border-bottom: none; }
+  .mini-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .val-pos { color: var(--positive); font-weight: 600; }
+  .val-neg { color: var(--negative); font-weight: 600; }
+  .val-warn { color: var(--warning); font-weight: 600; }
+
+  /* Alerta sem dados */
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .empty-state i { font-size: 28px; display: block; margin-bottom: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Barra de Filtros ── -->
+<form method="get" action="">
+  <div class="filter-bar">
+    <div>
+      <label for="data_inicio">De</label>
+      <input type="date" id="data_inicio" name="data_inicio"
+             class="form-control" style="width:150px;"
+             value="{{ data_inicio }}">
+    </div>
+    <div>
+      <label for="data_fim">Até</label>
+      <input type="date" id="data_fim" name="data_fim"
+             class="form-control" style="width:150px;"
+             value="{{ data_fim }}">
+    </div>
+    <div style="display:flex;gap:8px;padding-bottom:0;">
+      <button type="submit" class="btn-filter">
+        <i class="bi bi-funnel"></i> Filtrar
+      </button>
+      <a href="{% url 'trades:comportamental' %}" class="btn-filter-clear">
+        <i class="bi bi-x"></i> Limpar
+      </a>
+    </div>
+  </div>
+</form>
+
+{% if sem_dados %}
+  <div style="text-align:center;padding:80px;color:var(--text-muted);">
+    <i class="bi bi-inbox" style="font-size:40px;display:block;margin-bottom:12px;"></i>
+    <p>Nenhuma operação encontrada para o período selecionado.</p>
+    <a href="{% url 'trades:importar' %}" class="btn-filter" style="display:inline-flex;gap:6px;">
+      <i class="bi bi-upload"></i> Importar CSV
+    </a>
+  </div>
+
+{% else %}
+
+<!-- ══════════════════════════════════════════════════════
+     1. REVENGE TRADING
+══════════════════════════════════════════════════════ -->
+<div class="chart-card mb-3">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--negative-soft);color:var(--negative);">
+      <i class="bi bi-fire"></i>
+    </div>
+    <div>
+      <div class="section-title">Revenge Trading</div>
+      <div class="section-sub">Operações abertas rapidamente após um loss</div>
+    </div>
+    <span class="limiar-badge">
+      limiar &lt; {{ limiar_revenge }} min
+    </span>
+  </div>
+
+  <div class="row g-3 mb-3">
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card {% if revenge_total > 0 %}neg{% else %}pos{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-exclamation-octagon"></i></div>
+        <div class="kpi-label">Episódios</div>
+        <div class="kpi-value">{{ revenge_total }}</div>
+        <div class="kpi-sub">operações suspeitas</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card {% if revenge_resultado >= 0 %}pos{% else %}neg{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-currency-dollar"></i></div>
+        <div class="kpi-label">Resultado nos Episódios</div>
+        <div class="kpi-value">
+          {% if revenge_resultado >= 0 %}+{% endif %}R$ {{ revenge_resultado|floatformat:2 }}
+        </div>
+        <div class="kpi-sub">acumulado nesses trades</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card {% if revenge_win_count > revenge_loss_count %}pos{% else %}neg{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-bullseye"></i></div>
+        <div class="kpi-label">Wins / Losses</div>
+        <div class="kpi-value" style="color:var(--text-primary);">
+          <span style="color:var(--positive);">{{ revenge_win_count }}</span>
+          <span style="font-size:16px;color:var(--border);">/</span>
+          <span style="color:var(--negative);">{{ revenge_loss_count }}</span>
+        </div>
+        <div class="kpi-sub">nos episódios de revenge</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card {% if revenge_total == 0 %}pos{% else %}warn{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-shield-check"></i></div>
+        <div class="kpi-label">Avaliação</div>
+        <div class="kpi-value" style="font-size:16px;">
+          {% if revenge_total == 0 %}
+            Nenhum
+          {% elif revenge_total <= 2 %}
+            Baixo
+          {% elif revenge_total <= 5 %}
+            Moderado
+          {% else %}
+            Alto
+          {% endif %}
+        </div>
+        <div class="kpi-sub">
+          {% if revenge_total == 0 %}sem episódios no período
+          {% elif revenge_total <= 2 %}poucos episódios
+          {% elif revenge_total <= 5 %}atenção ao comportamento
+          {% else %}padrão preocupante
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {% if revenge_ops %}
+  <div style="overflow-x:auto;">
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Data / Hora</th>
+          <th>Ativo</th>
+          <th style="text-align:right;">Intervalo</th>
+          <th style="text-align:right;">Loss Anterior</th>
+          <th style="text-align:right;">Resultado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for op in revenge_ops %}
+        <tr>
+          <td>{{ op.abertura }}</td>
+          <td style="font-weight:600;color:var(--text-primary);">{{ op.ativo }}</td>
+          <td style="text-align:right;">
+            <span class="val-warn">{{ op.intervalo }} min</span>
+          </td>
+          <td style="text-align:right;">
+            <span class="val-neg">R$ {{ op.loss_anterior|floatformat:2 }}</span>
+          </td>
+          <td style="text-align:right;">
+            {% if op.resultado >= 0 %}
+              <span class="val-pos">+R$ {{ op.resultado|floatformat:2 }}</span>
+            {% else %}
+              <span class="val-neg">R$ {{ op.resultado|floatformat:2 }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-check-circle" style="color:var(--positive);"></i>
+    Nenhum episódio de revenge trading detectado no período.
+  </div>
+  {% endif %}
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     2. OVERTRADING
+══════════════════════════════════════════════════════ -->
+<div class="chart-card mb-3">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(56,139,253,.1);color:var(--accent-blue);">
+      <i class="bi bi-lightning-charge"></i>
+    </div>
+    <div>
+      <div class="section-title">Overtrading</div>
+      <div class="section-sub">Dias com volume de operações acima do planejado</div>
+    </div>
+    <span class="limiar-badge">
+      limiar &gt; {{ limiar_overtrading }} ops/dia
+    </span>
+  </div>
+
+  <div class="row g-3 mb-3">
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card blue">
+        <div class="kpi-icon"><i class="bi bi-calendar3"></i></div>
+        <div class="kpi-label">Média de Ops / Dia</div>
+        <div class="kpi-value">{{ media_ops_dia }}</div>
+        <div class="kpi-sub">em {{ total_dias }} dia{{ total_dias|pluralize }} de pregão</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card {% if n_overtrading == 0 %}pos{% else %}neg{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-graph-up-arrow"></i></div>
+        <div class="kpi-label">Dias em Overtrading</div>
+        <div class="kpi-value">{{ n_overtrading }}</div>
+        <div class="kpi-sub">
+          {% if total_dias %}
+            {{ n_overtrading }} de {{ total_dias }}
+            ({% widthratio n_overtrading total_dias 100 %}%)
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+      <div class="kpi-card {% if n_overtrading == 0 %}pos{% else %}warn{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-shield-check"></i></div>
+        <div class="kpi-label">Avaliação</div>
+        <div class="kpi-value" style="font-size:16px;">
+          {% if n_overtrading == 0 %}
+            Nenhum
+          {% elif n_overtrading <= 2 %}
+            Baixo
+          {% elif n_overtrading <= 5 %}
+            Moderado
+          {% else %}
+            Alto
+          {% endif %}
+        </div>
+        <div class="kpi-sub">
+          {% if n_overtrading == 0 %}dentro do limite em todos os dias
+          {% elif n_overtrading <= 2 %}poucos dias acima do limite
+          {% elif n_overtrading <= 5 %}atenção à disciplina operacional
+          {% else %}padrão de excesso recorrente
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Gráfico operações × resultado -->
+  {% if grafico_overtrading %}
+    <div style="margin-bottom:16px;">{{ grafico_overtrading|safe }}</div>
+  {% endif %}
+
+  <!-- Tabela de dias em overtrading -->
+  {% if dias_overtrading %}
+  <div style="overflow-x:auto;">
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th style="text-align:right;">Operações</th>
+          <th style="text-align:right;">Resultado do Dia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in dias_overtrading %}
+        <tr>
+          <td>{{ d.data_str }}</td>
+          <td style="text-align:right;">
+            <span class="val-warn">{{ d.total_ops }}</span>
+          </td>
+          <td style="text-align:right;">
+            {% if d.resultado_dia >= 0 %}
+              <span class="val-pos">+R$ {{ d.resultado_dia|floatformat:2 }}</span>
+            {% else %}
+              <span class="val-neg">R$ {{ d.resultado_dia|floatformat:2 }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-check-circle" style="color:var(--positive);"></i>
+    Nenhum dia acima do limite de operações no período.
+  </div>
+  {% endif %}
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     3. APROVEITAMENTO DO MEP
+══════════════════════════════════════════════════════ -->
+<div class="chart-card mb-3">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--positive-soft);color:var(--positive);">
+      <i class="bi bi-arrow-up-right-circle"></i>
+    </div>
+    <div>
+      <div class="section-title">Aproveitamento do Potencial (MEP)</div>
+      <div class="section-sub">Quanto do ganho potencial disponível foi efetivamente capturado nas vencedoras</div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+
+    <div class="col-12 col-xl-4">
+      <div class="kpi-card {% if aprov_medio is not None %}{% if aprov_medio >= 70 %}pos{% elif aprov_medio >= 40 %}warn{% else %}neg{% endif %}{% else %}blue{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-percent"></i></div>
+        <div class="kpi-label">Aproveitamento Médio</div>
+        <div class="kpi-value">
+          {% if aprov_medio is not None %}{{ aprov_medio|floatformat:1 }}%{% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">
+          {% if aprov_medio is not None %}
+            {% if aprov_medio >= 70 %}bom aproveitamento
+            {% elif aprov_medio >= 40 %}aproveitamento moderado
+            {% else %}deixando muito na mesa
+            {% endif %}
+          {% else %}
+            sem operações vencedoras com MEP
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-8">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;height:100%;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);margin-bottom:10px;">
+          Como interpretar
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.7;font-family:var(--font-mono);">
+          <span style="color:var(--positive);">100%</span> → saiu exatamente no topo da operação<br>
+          <span style="color:var(--warning);">50%</span> → capturou metade do potencial disponível<br>
+          <span style="color:var(--negative);">< 30%</span> → saiu muito antes do potencial máximo
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {% if pior_aprov_lista %}
+  <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">
+    Operações com menor aproveitamento
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Data / Hora</th>
+          <th>Ativo</th>
+          <th style="text-align:right;">Resultado</th>
+          <th style="text-align:right;">MEP</th>
+          <th style="text-align:right;">Aproveitamento</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for op in pior_aprov_lista %}
+        <tr>
+          <td>{{ op.abertura_str }}</td>
+          <td style="font-weight:600;color:var(--text-primary);">{{ op.ativo }}</td>
+          <td style="text-align:right;">
+            <span class="val-pos">+R$ {{ op.resultado_operacao|floatformat:2 }}</span>
+          </td>
+          <td style="text-align:right;color:var(--text-dim);">
+            R$ {{ op.mep|floatformat:2 }}
+          </td>
+          <td style="text-align:right;">
+            {% if op.aproveitamento >= 70 %}
+              <span class="val-pos">{{ op.aproveitamento|floatformat:1 }}%</span>
+            {% elif op.aproveitamento >= 40 %}
+              <span class="val-warn">{{ op.aproveitamento|floatformat:1 }}%</span>
+            {% else %}
+              <span class="val-neg">{{ op.aproveitamento|floatformat:1 }}%</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-info-circle"></i>
+    Sem operações vencedoras com MEP disponível no período.
+  </div>
+  {% endif %}
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     4. GESTÃO DE STOP — MEN
+══════════════════════════════════════════════════════ -->
+<div class="chart-card mb-3">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--negative-soft);color:var(--negative);">
+      <i class="bi bi-arrow-down-right-circle"></i>
+    </div>
+    <div>
+      <div class="section-title">Gestão de Stop (MEN)</div>
+      <div class="section-sub">Nas perdedoras, o quanto o trader segurou antes de sair</div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+
+    <div class="col-12 col-xl-4">
+      <div class="kpi-card {% if men_razao_media is not None %}{% if men_razao_media <= 110 %}pos{% elif men_razao_media <= 150 %}warn{% else %}neg{% endif %}{% else %}blue{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-speedometer2"></i></div>
+        <div class="kpi-label">Razão MEN / Resultado</div>
+        <div class="kpi-value">
+          {% if men_razao_media is not None %}{{ men_razao_media|floatformat:1 }}%{% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">
+          {% if men_razao_media is not None %}
+            {% if men_razao_media <= 110 %}stop bem executado
+            {% elif men_razao_media <= 150 %}algum excesso antes de sair
+            {% else %}padrão de segurar demais
+            {% endif %}
+          {% else %}
+            sem operações perdedoras com MEN
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-8">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;height:100%;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);margin-bottom:10px;">
+          Como interpretar
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.7;font-family:var(--font-mono);">
+          <span style="color:var(--positive);">≈ 100%</span> → saiu próximo ao fundo (stop preciso)<br>
+          <span style="color:var(--warning);">150%</span> → o MEN foi 50% pior que o resultado final<br>
+          <span style="color:var(--negative);">> 200%</span> → segurou muito além do stop ideal
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {% if piores_stop_lista %}
+  <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">
+    Operações com pior gestão de stop
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Data / Hora</th>
+          <th>Ativo</th>
+          <th style="text-align:right;">Resultado</th>
+          <th style="text-align:right;">MEN</th>
+          <th style="text-align:right;">Razão MEN</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for op in piores_stop_lista %}
+        <tr>
+          <td>{{ op.abertura_str }}</td>
+          <td style="font-weight:600;color:var(--text-primary);">{{ op.ativo }}</td>
+          <td style="text-align:right;">
+            <span class="val-neg">R$ {{ op.resultado_operacao|floatformat:2 }}</span>
+          </td>
+          <td style="text-align:right;color:var(--text-dim);">
+            R$ {{ op.men|floatformat:2 }}
+          </td>
+          <td style="text-align:right;">
+            {% if op.razao_men <= 110 %}
+              <span class="val-pos">{{ op.razao_men|floatformat:1 }}%</span>
+            {% elif op.razao_men <= 150 %}
+              <span class="val-warn">{{ op.razao_men|floatformat:1 }}%</span>
+            {% else %}
+              <span class="val-neg">{{ op.razao_men|floatformat:1 }}%</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-info-circle"></i>
+    Sem operações perdedoras com MEN disponível no período.
+  </div>
+  {% endif %}
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     5. CONSISTÊNCIA / DISCIPLINA
+══════════════════════════════════════════════════════ -->
+<div class="chart-card mb-3">
+  <div class="section-header">
+    <div class="section-icon" style="background:var(--accent-blue-soft);color:var(--accent-blue);">
+      <i class="bi bi-bar-chart-steps"></i>
+    </div>
+    <div>
+      <div class="section-title">Consistência / Disciplina</div>
+      <div class="section-sub">Regularidade dos resultados ao longo do período</div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card {% if pct_dias_positivos >= 60 %}pos{% elif pct_dias_positivos >= 40 %}warn{% else %}neg{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-calendar-check"></i></div>
+        <div class="kpi-label">Dias Positivos</div>
+        <div class="kpi-value">{{ pct_dias_positivos|floatformat:1 }}%</div>
+        <div class="kpi-sub">dos {{ total_dias }} dia{{ total_dias|pluralize }} de pregão</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card blue">
+        <div class="kpi-icon"><i class="bi bi-distribute-vertical"></i></div>
+        <div class="kpi-label">Desvio Padrão Diário</div>
+        <div class="kpi-value">
+          {% if desvio_padrao_diario is not None %}
+            R$ {{ desvio_padrao_diario|floatformat:2 }}
+          {% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">volatilidade do resultado por dia</div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card {% if sequencia_tipo == 'W' %}pos{% else %}neg{% endif %}">
+        <div class="kpi-icon">
+          <i class="bi {% if sequencia_tipo == 'W' %}bi-arrow-up-circle{% else %}bi-arrow-down-circle{% endif %}"></i>
+        </div>
+        <div class="kpi-label">Sequência Atual</div>
+        <div class="kpi-value">
+          {% if sequencia_atual %}
+            {{ sequencia_atual }}
+            {% if sequencia_tipo == 'W' %}W{% else %}L{% endif %}
+          {% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">
+          {% if sequencia_tipo == 'W' %}dias positivos consecutivos
+          {% elif sequencia_tipo == 'L' %}dias negativos consecutivos
+          {% else %}sem dados{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+      <div class="kpi-card {% if pct_dias_positivos >= 60 %}pos{% elif pct_dias_positivos >= 40 %}warn{% else %}neg{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-shield-check"></i></div>
+        <div class="kpi-label">Avaliação</div>
+        <div class="kpi-value" style="font-size:16px;">
+          {% if pct_dias_positivos >= 60 %}Consistente
+          {% elif pct_dias_positivos >= 40 %}Regular
+          {% else %}Irregular
+          {% endif %}
+        </div>
+        <div class="kpi-sub">
+          {% if pct_dias_positivos >= 60 %}maioria dos dias positivos
+          {% elif pct_dias_positivos >= 40 %}resultado equilibrado
+          {% else %}mais dias negativos que positivos
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {% if grafico_consistencia %}
+    {{ grafico_consistencia|safe }}
+  {% endif %}
+
+</div>
+
+{% endif %}
+{% endblock %}

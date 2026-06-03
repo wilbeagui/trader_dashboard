@@ -28,7 +28,7 @@ operacional.
 - Dashboard com curva de capital e principais métricas
 - Análise de performance por horário, ativo, dia da semana e setup
 - Heat map de resultado por dia da semana × horário
-- Indicadores comportamentais (revenge trading, disciplina)
+- Indicadores comportamentais (revenge trading, disciplina) ← IMPLEMENTADO
 - Relatório exportável em PDF
 
 ## Stack
@@ -48,9 +48,9 @@ operacional.
 
 trader_dashboard/
 ├── .venv/
-├── apps/                     ← pasta que agrupa todos os apps
+├── apps/
 │   ├── __init__.py
-│   └── trades/               ← app principal
+│   └── trades/
 │       ├── migrations/
 │       ├── admin.py
 │       ├── apps.py
@@ -58,12 +58,12 @@ trader_dashboard/
 │       ├── services.py
 │       ├── urls.py
 │       └── views.py
-├── core/                     ← configurações do projeto
+├── core/
 │   ├── settings/
 │   │   ├── __init__.py
-│   │   ├── base.py           ← configurações comuns
-│   │   ├── development.py    ← SQLite, DEBUG=True
-│   │   └── production.py     ← PostgreSQL, DEBUG=False
+│   │   ├── base.py
+│   │   ├── development.py
+│   │   └── production.py
 │   ├── asgi.py
 │   ├── urls.py
 │   └── wsgi.py
@@ -72,7 +72,7 @@ trader_dashboard/
 ├── templates/
 │   ├── base.html
 │   └── trades/
-│       ├── comportamental.html  ← NOVO (a criar)
+│       ├── comportamental.html
 │       ├── dashboard.html
 │       ├── dia.html
 │       ├── importar.html
@@ -152,16 +152,19 @@ Cada trade individual importado do Profitchart.
 - @property is_win → resultado_operacao > 0
 - @property duracao_minutos → (fechamento - abertura).total_seconds() / 60
 
-### ParametrosTrader  ← NOVO (a criar)
+### ParametrosTrader
 Configuração singleton do trader. Editável via Django Admin.
 Preparado para futura migração a multi-usuário (adicionar FK User).
-- `tempo_minimo_entre_trades` → IntegerField(default=2)  ← minutos; limiar para Revenge Trading
-- `max_operacoes_dia`         → IntegerField(default=5)  ← limiar para Overtrading
+- `tempo_minimo_entre_trades` → IntegerField(default=2)
+  Limiar em minutos para detecção de revenge trading.
+- `max_operacoes_dia` → IntegerField(default=5)
+  Limiar diário para detecção de overtrading.
 - Meta.verbose_name = "Parâmetros do Trader"
-- save() força pk=1 (singleton)
+- save() força pk=1 (singleton); delete() bloqueado
 - classmethod carregar() → get_or_create(pk=1)
 
 ## Arquivos criados e o que fazem
+
 - `core/settings/base.py` → configurações comuns a todos os ambientes
 - `core/settings/development.py` → configurações de desenvolvimento
 - `core/settings/production.py` → configurações de produção (PostgreSQL)
@@ -170,27 +173,41 @@ Preparado para futura migração a multi-usuário (adicionar FK User).
 - `core/asgi.py` → aponta para core.settings.development
 - `manage.py` → aponta para core.settings.development
 - `apps/trades/models.py` → 4 models: ImportacaoArquivo, SessaoOperacao, Operacao, ParametrosTrader
-- `apps/trades/migrations/0001_initial.py` → migração inicial
-- `apps/trades/admin.py` → registra os 4 models no Django Admin
-- `apps/trades/views.py` → 5 views:
-  - dashboard() → métricas base + Expectativa Matemática + Payoff Ratio + 4 gráficos Plotly
+- `apps/trades/migrations/0001_initial.py` → migração inicial (3 models)
+- `apps/trades/migrations/0002_parametrostrader.py` → migração ParametrosTrader
+- `apps/trades/admin.py` → registra os 4 models; ParametrosTraderAdmin redireciona
+  listagem direto para edição, impede criação de segundo registro e impede exclusão
+- `apps/trades/views.py` → 5 views + helpers:
+  - _calcular_metricas_avancadas(df) → Expectativa Matemática e Payoff Ratio
+  - _calcular_comportamental(df, params) → 5 indicadores comportamentais
+  - _grafico_overtrading() → barras de resultado + linha de ops com eixo duplo
+  - _grafico_consistencia() → barras de resultado por dia
+  - dashboard() → métricas base + EM + Payoff Ratio + 4 gráficos Plotly
   - importar() → upload CSV + exclusão de operações por data/ativo
-  - operacoes() → listagem com filtros por período e instrumento, paginação (10/20/50/100 por página, padrão 10), métricas calculadas sobre o total (não só a página visível), acumulado recalculado pelo período filtrado
-  - dia() → análise detalhada de um dia de pregão: KPIs em 4 linhas (resultado, risco, destaques, Payoff Ratio do dia), 3 gráficos (curva intraday, barras por horário, execução MEP/MEN), tabela do dia; acumulado recalculado via cumsum() apenas do dia
-  - comportamental() → NOVA: indicadores comportamentais com ParametrosTrader
-- `apps/trades/urls.py` → namespace='trades'; rotas: / (dashboard), /importar/, /operacoes/, /dia/, /comportamental/
+  - operacoes() → listagem com filtros, paginação (10/20/50/100), acumulado recalculado
+  - dia() → 4 linhas de KPIs, 3 gráficos, tabela; acumulado via cumsum()
+  - comportamental() → 5 indicadores + filtro de período + ParametrosTrader.carregar()
+- `apps/trades/urls.py` → namespace='trades'; rotas:
+  / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/
 - `apps/trades/services.py` → lógica de importação do CSV do Profitchart
-  - converter_decimal() → converte string brasileira para Decimal
-  - converter_datetime() → converte string para datetime com pytz
-  - converter_bool_medio() → converte campo Médio para booleano
-  - converter_tet() → trata campo TET (Tempo Entre Trades)
-  - importar_csv() → função principal de importação
-- `templates/base.html` → template base com sidebar fixa, topbar, Bootstrap 5 + Bootstrap Icons, JetBrains Mono + DM Sans, Plotly.js carregado uma vez no head; sidebar contém bloco nav_dia_seletor para exibir seletor de data na página dia; link para /comportamental/ no sidebar
-- `templates/trades/dashboard.html` → filter bar, linha 1 de cards (Resultado, Win Rate, Operações, Wins/Losses), linha 2 de cards (Expectativa Matemática, Payoff Ratio), 4 slots de gráficos Plotly
-- `templates/trades/dia.html` → análise detalhada do dia: KPIs linha 1 (Resultado, Win Rate, Fator de Lucro), linha 2 (Drawdown, Exposição Negativa, Operações), linha 3 (Maior Gain, Maior Loss, Tempo Médio Winners, Tempo Médio Losers), linha 4 (Payoff Ratio do dia); curva de capital intraday, resultado por horário, gráfico de execução MEP/MEN, tabela completa do dia
-- `templates/trades/importar.html` → upload com drag-and-drop, histórico de importações, instruções do Profitchart, seção "Gerenciar Dados" com exclusão por data+ativo (seletor dinâmico JS, preview, checkbox de confirmação, confirm() no browser)
-- `templates/trades/operacoes.html` → listagem com filtros por período e instrumento, seletor de itens por página, 4 cards totalizadores, tabela com badge WIN/LOSS, paginação numérica << < 1 2 3 > >>
-- `templates/trades/comportamental.html` → NOVA: página dedicada a indicadores comportamentais
+- `templates/base.html` → sidebar com links: Dashboard, Operações, Análise do Dia
+  (com seletor inline), Comportamental (ícone bi-person-check), Importar CSV;
+  bloco nav_comportamental para highlight ativo; .alert-warning adicionado ao CSS;
+  .val-warn adicionado ao CSS global
+- `templates/trades/dashboard.html` → filter bar; linha 1 de cards (Resultado, Win Rate,
+  Operações, Wins/Losses); linha 2 de cards (Expectativa Matemática, Payoff Ratio);
+  4 gráficos Plotly
+- `templates/trades/dia.html` → KPIs linha 1 (Resultado, Win Rate, Fator de Lucro),
+  linha 2 (Drawdown, Exposição Negativa, Operações), linha 3 (Maior Gain, Maior Loss,
+  Tempo Médio Winners, Tempo Médio Losers), linha 4 (Payoff Ratio do dia);
+  3 gráficos; tabela completa
+- `templates/trades/importar.html` → upload drag-and-drop; histórico de importações;
+  instruções do Profitchart; seção "Gerenciar Dados" com exclusão por data+ativo
+  (seletor dinâmico JS, preview, checkbox de confirmação, confirm() no browser)
+- `templates/trades/operacoes.html` → listagem com filtros, seletor de itens por página,
+  4 cards totalizadores, tabela com badge WIN/LOSS, paginação numérica
+- `templates/trades/comportamental.html` → página dedicada com filtro de período e
+  5 seções de indicadores comportamentais, cada uma com KPIs, tabelas e gráficos
 - `.env` → variáveis de ambiente (SECRET_KEY, DEBUG)
 - `.gitignore` → arquivos ignorados pelo Git
 
@@ -215,24 +232,31 @@ Preparado para futura migração a multi-usuário (adicionar FK User).
   2. Área negativa (fill='tozeroy', vermelha rgba(224,92,92,0.12), line width=0, hoverinfo skip)
   3. Linha principal (cor dinâmica: verde se acumulado final >= 0, vermelha se negativo)
   Requer import numpy as np. Máscaras: np.where(array > 0, array, 0) e np.where(array < 0, array, 0)
-  DECISÃO FINAL: esta abordagem resolve o preenchimento por região sem descontinuidade visual,
-  pois as áreas são calculadas diretamente via numpy (não por interpolação entre pontos)
 - Heat map: colorscale divergente com zmid=0 (centro fixo no zero);
-  cor central = #161b22 (fundo do card) → células com valor zero ficam invisíveis,
-  evitando falsa impressão de resultado negativo em horários sem negociação
-- Expectativa Matemática: calculada na função _calcular_metricas_avancadas();
-  EM = (win_rate × gain_médio) + (loss_rate × loss_médio); exibida no Dashboard (visão geral)
-  e omitida da página Dia por ter baixo valor estatístico com poucas operações
-- Payoff Ratio: gain_médio / |loss_médio|; exibido no Dashboard e na página Dia (linha 4 de KPIs)
-  com subtítulo mostrando gain médio e loss médio; fallback "—" quando sem wins ou losses
-- ParametrosTrader: singleton (pk=1 forçado no save()); editável via Django Admin;
-  preparado para migração futura a multi-usuário adicionando FK User e trocando
-  carregar() por get(usuario=request.user)
-- Indicadores comportamentais em página dedicada /comportamental/ (não no dashboard),
-  pois têm narrativa própria e crescerão independentemente das métricas de performance
-- Exclusão de dados: integrada à página Importar; filtra por data + ativo (opcional);
-  após delete limpa SessaoOperacao e ImportacaoArquivo órfãos; dupla confirmação
-  (checkbox + confirm() JS) para evitar exclusão acidental
+  cor central = #161b22 (fundo do card) → células com valor zero ficam invisíveis
+- Expectativa Matemática: EM = (win_rate × gain_médio) + (loss_rate × loss_médio);
+  exibida no Dashboard; omitida da página Dia por baixo valor estatístico com poucas ops
+- Payoff Ratio: gain_médio / |loss_médio|; exibido no Dashboard e página Dia (linha 4)
+- ParametrosTrader: singleton (pk=1 forçado no save(), delete() bloqueado);
+  editável via Django Admin; ParametrosTraderAdmin redireciona listagem para edição direta,
+  impede criação de segundo registro e impede exclusão pelo Admin;
+  preparado para migração futura a multi-usuário (FK User + carregar por usuário)
+- Indicadores comportamentais em página dedicada /comportamental/ com filtro de período;
+  consomem ParametrosTrader.carregar() para os limiares configuráveis
+- Revenge Trading: operação aberta em menos de params.tempo_minimo_entre_trades minutos
+  após um loss; calcula episódios, resultado acumulado, wins/losses nesses trades
+- Overtrading: dias com mais de params.max_operacoes_dia operações; gráfico duplo
+  com barras de resultado (eixo Y esquerdo) e linha de qtd ops (eixo Y direito)
+  com linha de limiar em amarelo tracejado
+- Aproveitamento MEP: resultado/MEP nas winners; 100% = saiu no topo;
+  top 5 com menor aproveitamento exibidos em tabela
+- Gestão de Stop MEN: |MEN|/|resultado| nas losers; ≈100% = stop preciso;
+  top 5 com maior razão exibidos em tabela
+- Consistência: % dias positivos, desvio padrão diário, sequência atual W/L consecutivos
+- Exclusão de dados: integrada à página Importar; dupla confirmação (checkbox + confirm() JS);
+  após delete limpa SessaoOperacao e ImportacaoArquivo órfãos
+- Ícones Bootstrap Icons: usar apenas ícones disponíveis na versão 1.11.3;
+  bi-brain não existe nesta versão → substituído por bi-person-check no sidebar
 
 ## Regras críticas — OBRIGATÓRIO seguir em qualquer alteração de views.py
 
@@ -255,6 +279,8 @@ Preparado para futura migração a multi-usuário (adicionar FK User).
   de área positiva e negativa; calcular ymin/ymax com range explícito no yaxis
 - Heat map: usar zmid=0 no go.Heatmap e cor central #161b22 no colorscale;
   NUNCA usar #1c2330 ou outro tom como cor central (zero ficaria colorido)
+- Gráfico overtrading: eixo duplo com yaxis2 (overlaying='y', side='right');
+  linha de limiar via add_hline com yref='y2'
 
 ### Views
 - NUNCA fazer duas chamadas Operacao.objects.all() na mesma view
@@ -276,15 +302,18 @@ Preparado para futura migração a multi-usuário (adicionar FK User).
 ### Acumulado
 - O campo total_acumulado do banco reflete o histórico completo desde a primeira operação
 - NUNCA usar total_acumulado do banco diretamente em páginas filtradas por período ou dia
-- Em operacoes(): recalcular via soma progressiva sobre os registros do período, na ordem
-  cronológica, sobrescrevendo o valor do banco antes de exibir
+- Em operacoes(): recalcular via soma progressiva sobre os registros do período
 - Em dia(): recalcular via df['total_acumulado'] = df['resultado_operacao'].cumsum()
-  após ordenar o DataFrame por abertura; montar a tabela a partir do DataFrame corrigido
 
 ### ParametrosTrader
 - Sempre carregar via ParametrosTrader.carregar() no início das views que precisam dos parâmetros
 - Nunca instanciar diretamente; usar o classmethod carregar() que garante o singleton
 - Nas views, referenciar como params.tempo_minimo_entre_trades, params.max_operacoes_dia etc.
+
+### Bootstrap Icons
+- Versão em uso: 1.11.3
+- Verificar existência do ícone nesta versão antes de usar
+- bi-brain NÃO existe na 1.11.3 → usar bi-person-check para "Comportamental"
 
 ### PowerShell
 - Criar arquivos vazios: New-Item nomedoarquivo (não usar "type nul >")
@@ -296,49 +325,49 @@ Preparado para futura migração a multi-usuário (adicionar FK User).
 - Instrumento: WIN (mini índice) em vários vencimentos
 
 ## Gráficos implementados no Dashboard
-1. Curva de Capital → três traces: área positiva (verde), área negativa (vermelha) e linha
-   principal com cor dinâmica; máscaras via numpy (np.where); range do yaxis explícito
-2. Resultado por Horário → barras verticais coloridas individualmente por resultado
-3. Resultado por Ativo → barras horizontais agrupadas por instrumento (AGRUPAMENTO_ATIVOS)
-4. Heat map Dia × Horário → colorscale divergente verde/vermelho, zmid=0,
-   cor central #161b22 para que células com valor zero fiquem invisíveis
+1. Curva de Capital → três traces: área positiva, negativa e linha principal com cor dinâmica
+2. Resultado por Horário → barras verticais coloridas individualmente
+3. Resultado por Ativo → barras horizontais agrupadas por instrumento
+4. Heat Map Dia × Horário → colorscale divergente, zmid=0, cor central #161b22
 
 ## Gráficos implementados na página Dia
-1. Curva de Capital intraday → mesma lógica do dashboard com três traces e numpy;
-   eixo X com HH:MM; linha principal com markers nos pontos das operações
-2. Resultado por Horário → barras verticais por HH:MM (não hora cheia como no dashboard)
-3. Análise de Execução → barras horizontais por operação mostrando resultado final (barra),
-   MEP (marcador triângulo verde) e MEN (marcador triângulo vermelho); altura dinâmica
+1. Curva de Capital intraday → mesma lógica do dashboard; eixo X com HH:MM; markers nos pontos
+2. Resultado por Horário → barras verticais por HH:MM
+3. Análise de Execução → barras horizontais MEP/MEN/Resultado; altura dinâmica
+
+## Gráficos implementados na página Comportamental
+1. Overtrading → eixo duplo: barras de resultado R$ (esquerdo) + linha de qtd ops (direito);
+   linha de limiar amarela tracejada; pontos vermelhos nos dias acima do limiar
+2. Consistência → barras de resultado por dia coloridas individualmente; linha zero destacada
 
 ## Métricas avançadas implementadas
-- Expectativa Matemática → função _calcular_metricas_avancadas(df) em views.py;
-  retorna None quando não há wins e losses simultaneamente; exibida no Dashboard
-- Payoff Ratio (R Múltiplo Médio) → mesma função; exibido no Dashboard e página Dia;
-  subtítulo mostra gain_medio e loss_medio para contexto
+- Expectativa Matemática → _calcular_metricas_avancadas(df); exibida no Dashboard
+- Payoff Ratio → mesma função; exibido no Dashboard e página Dia
 
-## Indicadores comportamentais planejados (página /comportamental/)
+## Indicadores comportamentais implementados (página /comportamental/)
 Todos consomem ParametrosTrader.carregar() para os limiares configuráveis.
 
 1. Revenge Trading
-   - Detecta: operação iniciada em menos de params.tempo_minimo_entre_trades minutos após loss
-   - Exibe: episódios no período, resultado acumulado nesses trades, destaque na tabela
+   - Limiar: params.tempo_minimo_entre_trades (minutos)
+   - Detecta: operação aberta em menos do limiar após um loss
+   - Exibe: episódios, resultado acumulado, wins/losses, tabela detalhada, avaliação qualitativa
 
 2. Overtrading
-   - Detecta: dias com mais de params.max_operacoes_dia operações
-   - Exibe: média de ops/dia, dias acima do limiar, gráfico operações × resultado
+   - Limiar: params.max_operacoes_dia (operações)
+   - Detecta: dias com mais operações que o limiar
+   - Exibe: média ops/dia, dias em overtrading, gráfico duplo, tabela de dias, avaliação
 
-3. Aproveitamento do MEP (nas vencedoras)
-   - Detecta: razão resultado/MEP nas wins (1.0 = saiu no topo; < 1 = deixou na mesa)
-   - Exibe: aproveitamento médio %, operações com maior "desperdício"
+3. Aproveitamento do MEP (winners)
+   - Fórmula: resultado / MEP × 100
+   - Exibe: aproveitamento médio %, top 5 com menor aproveitamento, guia de interpretação
 
-4. Gestão de Stop — MEN (nas perdedoras)
-   - Detecta: razão |MEN|/|resultado| nas losses (alto = segurou demais antes de sair)
-   - Exibe: razão média, operações onde saiu próximo ao pior momento
+4. Gestão de Stop — MEN (losers)
+   - Fórmula: |MEN| / |resultado| × 100
+   - Exibe: razão média %, top 5 com maior razão, guia de interpretação
 
 5. Consistência / Disciplina
-   - Detecta: desvio padrão do resultado diário, sequência atual de dias W/L consecutivos
-   - Exibe: % dias positivos, desvio padrão, sequência atual
+   - Métricas: % dias positivos, desvio padrão diário, sequência atual W/L consecutivos
+   - Exibe: 4 KPIs com avaliação qualitativa, gráfico de resultado por dia
 
 ## Próximos passos planejados
-- Implementar página /comportamental/ com os 5 indicadores + ParametrosTrader
 - Relatório exportável em PDF

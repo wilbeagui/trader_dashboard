@@ -355,10 +355,11 @@
       font-size: 12.5px;
       border-bottom: 1px solid var(--border-subtle);
     }
-    .badge-win { background: var(--positive-soft); color: var(--positive); border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; font-family: var(--font-mono); }
+    .badge-win  { background: var(--positive-soft); color: var(--positive); border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; font-family: var(--font-mono); }
     .badge-loss { background: var(--negative-soft); color: var(--negative); border-radius: 5px; padding: 2px 8px; font-size: 11px; font-weight: 700; font-family: var(--font-mono); }
-    .val-pos { color: var(--positive); }
-    .val-neg { color: var(--negative); }
+    .val-pos  { color: var(--positive); }
+    .val-neg  { color: var(--negative); }
+    .val-warn { color: var(--warning);  }
 
     /* ── Upload ── */
     .upload-zone {
@@ -386,6 +387,7 @@
     }
     .alert-success { background: var(--positive-soft); border-color: rgba(63,182,139,.3); color: var(--positive); }
     .alert-danger  { background: var(--negative-soft); border-color: rgba(224,92,92,.3);  color: var(--negative); }
+    .alert-warning { background: rgba(227,179,65,.08); border-color: rgba(227,179,65,.3); color: var(--warning); }
     .alert-info    { background: var(--accent-blue-soft); border-color: rgba(56,139,253,.3); color: var(--accent-blue); }
 
     /* ── Scrollbar ── */
@@ -421,32 +423,34 @@
     </div>
   </div>
 
-   <div class="sidebar-nav">
-      <div class="nav-section-label">Análise</div>
-      <a href="{% url 'trades:dashboard' %}" class="nav-link {% block nav_dashboard %}{% endblock %}">
-        <i class="bi bi-speedometer2"></i> Dashboard
+  <div class="sidebar-nav">
+    <div class="nav-section-label">Análise</div>
+    <a href="{% url 'trades:dashboard' %}" class="nav-link {% block nav_dashboard %}{% endblock %}">
+      <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
+    <a href="{% url 'trades:operacoes' %}" class="nav-link {% block nav_operacoes %}{% endblock %}">
+      <i class="bi bi-table"></i> Operações
+    </a>
+
+    <!-- Análise do Dia com seletor inline -->
+    <div style="margin-bottom:2px;">
+      <a href="{% url 'trades:dia' %}" class="nav-link {% block nav_dia %}{% endblock %}"
+         style="justify-content:space-between;">
+        <span><i class="bi bi-calendar-day"></i> Análise do Dia</span>
+        <i class="bi bi-chevron-right" style="font-size:10px;opacity:.5;"></i>
       </a>
-      <a href="{% url 'trades:operacoes' %}" class="nav-link {% block nav_operacoes %}{% endblock %}">
-        <i class="bi bi-table"></i> Operações
-      </a>
- 
-      <!-- Análise do Dia com seletor inline -->
-      <div style="margin-bottom:2px;">
-        <a href="{% url 'trades:dia' %}" class="nav-link {% block nav_dia %}{% endblock %}"
-           style="justify-content:space-between;">
-          <span><i class="bi bi-calendar-day"></i> Análise do Dia</span>
-          <i class="bi bi-chevron-right" style="font-size:10px;opacity:.5;"></i>
-        </a>
- 
-        <!-- Seletor de data — aparece sempre que a página ativa for 'dia' -->
-        {% block nav_dia_seletor %}{% endblock %}
-      </div>
- 
-      <div class="nav-section-label" style="margin-top:12px;">Sistema</div>
-      <a href="{% url 'trades:importar' %}" class="nav-link {% block nav_importar %}{% endblock %}">
-        <i class="bi bi-upload"></i> Importar CSV
-      </a>
+      {% block nav_dia_seletor %}{% endblock %}
     </div>
+
+    <a href="{% url 'trades:comportamental' %}" class="nav-link {% block nav_comportamental %}{% endblock %}">
+      <i class="bi bi-person-check"></i> Comportamental
+    </a>
+
+    <div class="nav-section-label" style="margin-top:12px;">Sistema</div>
+    <a href="{% url 'trades:importar' %}" class="nav-link {% block nav_importar %}{% endblock %}">
+      <i class="bi bi-upload"></i> Importar CSV
+    </a>
+  </div>
 
   <div class="sidebar-footer">
     <span class="status-dot"></span>SQLite · dev
