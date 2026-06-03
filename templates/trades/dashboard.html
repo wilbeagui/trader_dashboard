@@ -41,8 +41,8 @@
   </div>
 </form>
 
-<!-- ── Cards de Métricas ── -->
-<div class="row g-3 mb-4">
+<!-- ── Cards de Métricas — linha 1 ── -->
+<div class="row g-3 mb-3">
 
   <!-- Resultado Total -->
   <div class="col-12 col-sm-6 col-xl-3">
@@ -74,7 +74,7 @@
       <div class="card-icon"><i class="bi bi-lightning-charge"></i></div>
       <div class="card-label">Operações</div>
       <div class="card-value">{{ total_operacoes }}</div>
-      <div class="card-sub">{{ total_sessoes }} dia{{ total_sessoes|pluralize }}  de pregão</div>
+      <div class="card-sub">{{ total_sessoes }} dia{{ total_sessoes|pluralize }} de pregão</div>
     </div>
   </div>
 
@@ -91,6 +91,55 @@
       <div class="card-sub">
         Melhor: <span style="color:var(--positive)">R$ {{ melhor_op|floatformat:2 }}</span>
         · Pior: <span style="color:var(--negative)">R$ {{ pior_op|floatformat:2 }}</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Cards de Métricas — linha 2: avançadas ── -->
+<div class="row g-3 mb-4">
+
+  <!-- Expectativa Matemática -->
+  <div class="col-12 col-sm-6">
+    <div class="card-dash {% if expectativa_matematica is not None %}{% if expectativa_matematica >= 0 %}positive{% else %}negative{% endif %}{% else %}neutral{% endif %}">
+      <div class="card-icon"><i class="bi bi-sigma"></i></div>
+      <div class="card-label">Expectativa Matemática</div>
+      <div class="card-value">
+        {% if expectativa_matematica is not None %}
+          {% if expectativa_matematica >= 0 %}+{% endif %}R$ {{ expectativa_matematica|floatformat:2 }}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+      <div class="card-sub">
+        {% if expectativa_matematica is not None %}
+          retorno esperado por operação
+        {% else %}
+          dados insuficientes (precisa de wins e losses)
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Payoff Ratio (R Múltiplo Médio) -->
+  <div class="col-12 col-sm-6">
+    <div class="card-dash {% if payoff_ratio is not None %}{% if payoff_ratio >= 1 %}positive{% else %}negative{% endif %}{% else %}neutral{% endif %}">
+      <div class="card-icon"><i class="bi bi-arrow-left-right"></i></div>
+      <div class="card-label">Payoff Ratio (R Múltiplo)</div>
+      <div class="card-value">
+        {% if payoff_ratio is not None %}
+          {{ payoff_ratio|floatformat:2 }}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+      <div class="card-sub">
+        {% if payoff_ratio is not None and gain_medio is not None and loss_medio is not None %}
+          gain médio R$ {{ gain_medio|floatformat:2 }} · loss médio R$ {{ loss_medio|floatformat:2 }}
+        {% else %}
+          dados insuficientes (precisa de wins e losses)
+        {% endif %}
       </div>
     </div>
   </div>

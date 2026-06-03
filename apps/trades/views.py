@@ -174,6 +174,76 @@ def _minimo_dia(acumulados: list[float]) -> float:
     return minimo if minimo < 0 else 0.0
 
 
+# ──────────────────────────────────────────────
+# Helper de métricas avançadas
+# ──────────────────────────────────────────────
+
+def _calcular_metricas_avancadas(df: pd.DataFrame) -> dict:
+    """
+    Calcula Expectativa Matemática e Payoff Ratio (R Múltiplo Médio).
+
+    Expectativa Matemática (EM):
+        EM = (win_rate × gain_médio) − (loss_rate × |loss_médio|)
+        Representa o retorno esperado por operação.
+        Positiva = estratégia lucrativa no longo prazo.
+
+    Payoff Ratio (R Múltiplo Médio):
+        Payoff = gain_médio / |loss_médio|
+        Razão entre o que se ganha nas vencedoras vs. o que se perde nas perdedoras.
+        Ex.: 1.5 significa que em média ganha-se 1.5× o que se perde.
+
+    Retorna dict com as chaves:
+        expectativa_matematica  → float | None
+        payoff_ratio            → float | None
+        gain_medio              → float | None
+        loss_medio              → float | None  (valor negativo)
+    """
+    if df.empty:
+        return {
+            "expectativa_matematica": None,
+            "payoff_ratio": None,
+            "gain_medio": None,
+            "loss_medio": None,
+        }
+
+    resultados = df["resultado_operacao"].astype(float)
+    total = len(resultados)
+
+    wins_mask = resultados > 0
+    losses_mask = resultados <= 0
+
+    n_wins = int(wins_mask.sum())
+    n_losses = int(losses_mask.sum())
+
+    if n_wins == 0 or n_losses == 0:
+        # Sem wins ou sem losses → métricas sem sentido estatístico
+        return {
+            "expectativa_matematica": None,
+            "payoff_ratio": None,
+            "gain_medio": float(resultados[wins_mask].mean()) if n_wins else None,
+            "loss_medio": float(resultados[losses_mask].mean()) if n_losses else None,
+        }
+
+    win_rate = n_wins / total
+    loss_rate = n_losses / total
+
+    gain_medio = float(resultados[wins_mask].mean())    # positivo
+    loss_medio = float(resultados[losses_mask].mean())  # negativo
+
+    # EM = (P_win × avg_gain) + (P_loss × avg_loss)
+    # Como loss_medio já é negativo, a subtração é implícita na soma
+    expectativa = round((win_rate * gain_medio) + (loss_rate * loss_medio), 2)
+
+    # Payoff = avg_gain / |avg_loss|
+    payoff = round(gain_medio / abs(loss_medio), 2)
+
+    return {
+        "expectativa_matematica": expectativa,
+        "payoff_ratio": payoff,
+        "gain_medio": round(gain_medio, 2),
+        "loss_medio": round(loss_medio, 2),
+    }
+
 
 # ──────────────────────────────────────────────
 # Gráficos
@@ -276,6 +346,7 @@ def _grafico_capital(df: pd.DataFrame) -> str:
 
     return _to_html(fig)
 
+
 def _grafico_horario(df: pd.DataFrame) -> str:
     """
     Resultado por Horário: barras verticais agrupadas por hora cheia.
@@ -354,7 +425,7 @@ def _grafico_ativos(df: pd.DataFrame) -> str:
 def _grafico_heatmap(df: pd.DataFrame) -> str:
     """
     Heat Map Dia × Horário.
- 
+
     zmid=0 força o centro da escala no zero.
     Cor central = #161b22 (fundo do card) → células com zero
     ficam "invisíveis", sem dar falsa impressão de resultado negativo.
@@ -502,6 +573,7 @@ def _grafico_capital_dia(df: pd.DataFrame) -> str:
     ))
     return _to_html(fig)
 
+
 def _grafico_horario_dia(df: pd.DataFrame) -> str:
     """Resultado por horário (barras) — mesmo padrão do dashboard."""
     if df.empty:
@@ -541,12 +613,12 @@ def _grafico_horario_dia(df: pd.DataFrame) -> str:
 def _grafico_execucao(df: pd.DataFrame) -> str:
     """
     Análise de Execução — MEP × MEN × Resultado por operação.
- 
+
     Cada operação vira uma linha horizontal com 3 elementos:
       • Barra azul:  do zero até o resultado final (gain ou loss)
       • Marcador ▲:  MEP (máxima exposição positiva atingida)
       • Marcador ▼:  MEN (máxima exposição negativa atingida)
- 
+
     Eixo Y: label com horário + ativo.
     Eixo X: valores em R$.
     """
@@ -623,20 +695,19 @@ def _grafico_execucao(df: pd.DataFrame) -> str:
     return _to_html(fig)
 
 
-
 # ──────────────────────────────────────────────
 # Views
 # ──────────────────────────────────────────────
 
 def dashboard(request):
     """
-    Página principal: filtros + cards + 4 gráficos Plotly.
+    Página principal: filtros + cards + métricas avançadas + 4 gráficos Plotly.
     """
     data_inicio, data_fim, qs = _filtrar_operacoes(request)
 
     df = _qs_to_df(qs)
 
-    # Métricas
+    # Métricas base
     if df.empty:
         resultado_total = 0
         total_operacoes = 0
@@ -658,11 +729,14 @@ def dashboard(request):
         pior_op = float(df["resultado_operacao"].min())
         total_sessoes = df["sessao__data_sessao"].nunique()
 
+    # Métricas avançadas
+    metricas_av = _calcular_metricas_avancadas(df)
+
     context = {
         # Filtros
         "data_inicio": data_inicio,
         "data_fim":    data_fim,
-        # Cards
+        # Cards base
         "resultado_total": resultado_total,
         "total_operacoes": total_operacoes,
         "total_wins":      total_wins,
@@ -671,6 +745,11 @@ def dashboard(request):
         "melhor_op":       melhor_op,
         "pior_op":         pior_op,
         "total_sessoes":   total_sessoes,
+        # Métricas avançadas
+        "expectativa_matematica": metricas_av["expectativa_matematica"],
+        "payoff_ratio":           metricas_av["payoff_ratio"],
+        "gain_medio":             metricas_av["gain_medio"],
+        "loss_medio":             metricas_av["loss_medio"],
         # Gráficos
         "grafico_capital": _grafico_capital(df),
         "grafico_horario": _grafico_horario(df),
@@ -735,7 +814,6 @@ def operacoes(request):
     win_rate = (total_wins / total_operacoes * 100) if total_operacoes else 0.0
 
     # Conversão de timezone em todos os registros
-
     registros_cronologicos = list(reversed(registros))
     acumulado_periodo = 0.0
     registros_conv = []
@@ -785,7 +863,6 @@ def operacoes(request):
     # Parâmetros GET sem 'pagina' (para links de paginação não quebrarem filtros)
     get_sem_pagina = request.GET.copy()
     get_sem_pagina.pop("pagina", None)
-    # ex: "data_inicio=2025-11-01&por_pagina=20"
     query_string = get_sem_pagina.urlencode()
 
     context = {
@@ -793,7 +870,6 @@ def operacoes(request):
         "data_fim":             data_fim,
         "instrumento":          instrumento,
         "ativos_disponiveis":   ativos_agrupados,
-        # objeto Page (iterável no template)
         "operacoes":            pagina_obj,
         "pagina_obj":           pagina_obj,
         "intervalo_paginas":    intervalo_paginas,
@@ -811,18 +887,70 @@ def operacoes(request):
 
 def importar(request):
     """
-    Upload de CSV exportado do Profitchart.
+    Upload de CSV exportado do Profitchart + exclusão de sessões por data/ativo.
     """
     resultado = None
     erro = None
 
     if request.method == "POST":
+        acao = request.POST.get("acao", "importar")
+
+        # ── Exclusão de sessão ──────────────────────────────────────
+        if acao == "excluir":
+            data_excluir = request.POST.get("data_excluir", "").strip()
+            ativo_excluir = request.POST.get("ativo_excluir", "").strip()
+            confirmar = request.POST.get("confirmar_exclusao", "")
+
+            if not data_excluir:
+                messages.error(request, "Selecione uma data para excluir.")
+            elif confirmar != "1":
+                messages.warning(
+                    request,
+                    "Marque a caixa de confirmação antes de excluir."
+                )
+            else:
+                # Filtra operações do dia; se ativo específico, filtra também
+                qs_del = Operacao.objects.filter(abertura__date=data_excluir)
+                if ativo_excluir and ativo_excluir != "todos":
+                    qs_del = qs_del.filter(ativo__startswith=ativo_excluir)
+
+                total_ops = qs_del.count()
+                if total_ops == 0:
+                    messages.warning(
+                        request,
+                        f"Nenhuma operação encontrada para {data_excluir}"
+                        + (f" / {ativo_excluir}" if ativo_excluir and ativo_excluir != "todos" else "")
+                        + "."
+                    )
+                else:
+                    qs_del.delete()
+
+                    # Limpa sessões que ficaram sem operações
+                    SessaoOperacao.objects.filter(
+                        operacoes__isnull=True
+                    ).delete()
+
+                    # Limpa ImportacaoArquivo sem nenhuma operação restante
+                    ImportacaoArquivo.objects.filter(
+                        operacoes__isnull=True
+                    ).delete()
+
+                    descricao = f"{data_excluir}"
+                    if ativo_excluir and ativo_excluir != "todos":
+                        descricao += f" · {ativo_excluir}"
+                    messages.success(
+                        request,
+                        f"{total_ops} operaç{'ão' if total_ops == 1 else 'ões'} "
+                        f"excluída{'s' if total_ops > 1 else ''} ({descricao})."
+                    )
+            return redirect("trades:importar")
+
+        # ── Importação de CSV ───────────────────────────────────────
         arquivo = request.FILES.get("arquivo")
         if not arquivo:
             erro = "Nenhum arquivo enviado."
         else:
             try:
-                # importar_csv deve estar implementado em services.py
                 importacao = importar_csv(arquivo)
                 resultado = importacao
                 messages.success(
@@ -833,12 +961,38 @@ def importar(request):
                 erro = str(exc)
                 messages.error(request, erro)
 
+    # ── Dados para o template ───────────────────────────────────────
     importacoes = ImportacaoArquivo.objects.order_by("-importado_em")[:10]
 
+    # Dias disponíveis no banco para o seletor de exclusão
+    dias_no_banco = (
+        Operacao.objects
+        .dates("abertura", "day", order="DESC")
+    )
+    dias_exclusao = [d.strftime("%Y-%m-%d") for d in dias_no_banco]
+
+    # Ativos agrupados por dia — para o select dinâmico de ativo
+    # Formato: {"2025-11-01": ["WIN", "WDO"], ...}
+    ativos_por_dia: dict[str, list[str]] = {}
+    ops_por_dia = (
+        Operacao.objects
+        .values("abertura__date", "ativo")
+        .distinct()
+        .order_by("abertura__date", "ativo")
+    )
+    for row in ops_por_dia:
+        dia_str = row["abertura__date"].strftime("%Y-%m-%d")
+        grupo = _agrupar_ativo(row["ativo"])
+        dia_list = ativos_por_dia.setdefault(dia_str, [])
+        if grupo not in dia_list:
+            dia_list.append(grupo)
+
     context = {
-        "resultado":   resultado,
-        "erro":        erro,
-        "importacoes": importacoes,
+        "resultado":      resultado,
+        "erro":           erro,
+        "importacoes":    importacoes,
+        "dias_exclusao":  dias_exclusao,
+        "ativos_por_dia": json.dumps(ativos_por_dia),  # serializado p/ JS
     }
     return render(request, "trades/importar.html", context)
 
@@ -855,7 +1009,7 @@ def dia(request):
     # Todos os dias com operações (para o seletor do sidebar)
     dias_disponiveis = (
         Operacao.objects
-        .dates("abertura", "day", order="DESC")   # já converte para date
+        .dates("abertura", "day", order="DESC")
     )
     # Converte para lista de strings YYYY-MM-DD
     dias_str = [d.strftime("%Y-%m-%d") for d in dias_disponiveis]
@@ -894,7 +1048,8 @@ def dia(request):
 
     # ── DataFrame ──
     df = pd.DataFrame(registros)
-    df["abertura"] = pd.to_datetime(df["abertura"], utc=True).dt.tz_convert(TZ_BR)
+    df["abertura"] = pd.to_datetime(
+        df["abertura"], utc=True).dt.tz_convert(TZ_BR)
     df["resultado_operacao"] = df["resultado_operacao"].astype(float)
 
     # Recalcular acumulado apenas com as operações do dia (ordem cronológica)
@@ -904,7 +1059,7 @@ def dia(request):
     df["mep"] = df["mep"].astype(float)
     df["men"] = df["men"].astype(float)
 
-    # ── KPIs ──
+    # ── KPIs base ──
     total_ops = len(df)
     resultado = float(df["resultado_operacao"].sum())
     wins_mask = df["resultado_operacao"] > 0
@@ -932,7 +1087,7 @@ def dia(request):
     maior_loss_ativo = maior_loss_row["ativo"]
     maior_loss_hora = maior_loss_row["abertura"].strftime("%H:%M")
 
-    # Tempo médio winners / losers (em minutos via fechamento - abertura)
+    # Tempo médio winners / losers
     df["fechamento_local"] = pd.to_datetime(
         df["fechamento"], utc=True
     ).dt.tz_convert(TZ_BR)
@@ -945,7 +1100,6 @@ def dia(request):
     tempo_medio_win = _calcular_tempo_medio_str(mins_winners)
     tempo_medio_loss = _calcular_tempo_medio_str(mins_losers)
 
-    # Razão perdedoras/vencedoras
     if mins_winners and mins_losers:
         media_w = sum(mins_winners) / len(mins_winners)
         media_l = sum(mins_losers) / len(mins_losers)
@@ -953,12 +1107,14 @@ def dia(request):
     else:
         razao = None
 
+    # ── Métricas avançadas do dia ──
+    metricas_av_dia = _calcular_metricas_avancadas(df)
+
     tabela = []
     for _, row in df.iterrows():
         tabela.append({
             "ativo":              row["ativo"],
             "lado":               row["lado"],
-            # já convertido para BRT no df
             "abertura_local":     row["abertura"],
             "qtd_compra":         row["qtd_compra"],
             "preco_compra":       row["preco_compra"],
@@ -967,9 +1123,8 @@ def dia(request):
             "men":                row["men"],
             "resultado_operacao": row["resultado_operacao"],
             "tempo_operacao":     row["tempo_operacao"],
-            "total_acumulado":    row["total_acumulado"],  # recalculado
+            "total_acumulado":    row["total_acumulado"],
         })
-
 
     context = {
         "sem_dados":         False,
@@ -997,6 +1152,10 @@ def dia(request):
         "razao_tempo":       razao,
         "total_wins":        total_wins,
         "total_losses":      total_losses,
+        # Métricas avançadas do dia
+        "payoff_ratio_dia":           metricas_av_dia["payoff_ratio"],
+        "gain_medio_dia":             metricas_av_dia["gain_medio"],
+        "loss_medio_dia":             metricas_av_dia["loss_medio"],
         # Gráficos
         "grafico_capital":   _grafico_capital_dia(df),
         "grafico_horario":   _grafico_horario_dia(df),

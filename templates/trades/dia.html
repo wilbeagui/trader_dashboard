@@ -254,6 +254,33 @@
 
 </div>
 
+<!-- ══ KPIs — Linha 4: métricas avançadas ══ -->
+<div class="row g-3 mb-3">
+
+  <!-- Payoff Ratio do Dia -->
+  <div class="col-12 col-xl-6">
+    <div class="kpi-card {% if payoff_ratio_dia is not None %}{% if payoff_ratio_dia >= 1 %}pos{% else %}neg{% endif %}{% else %}blue{% endif %}">
+      <div class="kpi-icon"><i class="bi bi-arrow-left-right"></i></div>
+      <div class="kpi-label">Payoff Ratio (R Múltiplo)</div>
+      <div class="kpi-value">
+        {% if payoff_ratio_dia is not None %}
+          {{ payoff_ratio_dia|floatformat:2 }}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+      <div class="kpi-sub">
+        {% if gain_medio_dia is not None and loss_medio_dia is not None %}
+          gain médio R$ {{ gain_medio_dia|floatformat:2 }} · loss médio R$ {{ loss_medio_dia|floatformat:2 }}
+        {% else %}
+          precisa de wins e losses no dia
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <!-- ══ Curva de Capital ══ -->
 <div class="chart-card mb-3">
   <div class="chart-title">
@@ -289,7 +316,6 @@
       <div class="chart-title">
         <i class="bi bi-crosshair"></i> Análise de Execução — MEP / MEN / Resultado
       </div>
-      <!-- Legenda manual -->
       <div class="exec-legend">
         <span><span class="dot" style="background:var(--positive);"></span> Resultado / MEP</span>
         <span><span class="dot" style="background:var(--negative);"></span> Resultado / MEN</span>
