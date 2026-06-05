@@ -194,3 +194,41 @@ class ParametrosTrader(models.Model):
         """Retorna a instância singleton, criando com defaults se não existir."""
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class JournalOperacao(models.Model):
+    EMOCAO_CHOICES = [
+        ('calmo',      'Calmo'),
+        ('ansioso',    'Ansioso'),
+        ('confiante',  'Confiante'),
+        ('frustrado',  'Frustrado'),
+        ('neutro',     'Neutro'),
+    ]
+
+    operacao = models.OneToOneField(
+        Operacao, on_delete=models.CASCADE, related_name='journal'
+    )
+    setup = models.CharField(max_length=50, blank=True)
+    tags = models.CharField(max_length=200, blank=True,
+                            help_text='Tags separadas por vírgula')
+    emocao = models.CharField(
+        max_length=20, choices=EMOCAO_CHOICES, blank=True)
+    qualidade_entrada = models.IntegerField(null=True, blank=True)
+    qualidade_saida = models.IntegerField(null=True, blank=True)
+    anotacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Journal de Operação'
+        verbose_name_plural = 'Journal de Operações'
+        ordering = ['-operacao__abertura']
+
+    def __str__(self):
+        return f'Journal #{self.operacao.pk} — {self.operacao.ativo}'
+
+    def tags_lista(self):
+        """Retorna lista de tags limpas."""
+        if not self.tags:
+            return []
+        return [t.strip() for t in self.tags.split(',') if t.strip()]

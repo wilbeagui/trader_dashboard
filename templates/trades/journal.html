@@ -1,0 +1,386 @@
+{% extends 'base.html' %}
+
+{% block title %}Journal de Operações{% endblock %}
+
+{% block content %}
+<style>
+  /* ── Journal page styles ─────────────────────────────────────── */
+  .journal-page { padding: 1.5rem 0; }
+
+  /* Filter bar */
+  .filter-bar {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .filter-bar .form-control,
+  .filter-bar .form-select {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #b8c4ce;
+    font-size: .825rem;
+  }
+  .filter-bar .form-control:focus,
+  .filter-bar .form-select:focus {
+    background: #0d1117;
+    border-color: #3fb68b;
+    color: #e6edf3;
+    box-shadow: 0 0 0 2px rgba(63,182,139,.15);
+  }
+  .filter-bar label { color: #8b949e; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* Setup metrics table */
+  .setup-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  .setup-card .card-header {
+    background: #0d1117;
+    border-bottom: 1px solid #30363d;
+    padding: .75rem 1.25rem;
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #8b949e;
+    font-weight: 600;
+  }
+  .setup-table th {
+    background: #0d1117;
+    color: #8b949e;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    border-color: #30363d;
+    padding: .6rem 1rem;
+    font-weight: 500;
+  }
+  .setup-table td {
+    color: #b8c4ce;
+    font-size: .85rem;
+    border-color: #21262d;
+    padding: .6rem 1rem;
+    vertical-align: middle;
+  }
+  .setup-table tbody tr:hover { background: rgba(255,255,255,.02); }
+
+  /* Journal list */
+  .journal-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    margin-bottom: .75rem;
+    transition: border-color .18s;
+  }
+  .journal-card:hover { border-color: #444c56; }
+  .journal-card .card-body { padding: 1rem 1.25rem; }
+
+  .journal-header {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-bottom: .5rem;
+  }
+  .j-ativo {
+    font-weight: 700;
+    font-size: .95rem;
+    color: #e6edf3;
+    letter-spacing: .03em;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+  .j-data { font-size: .78rem; color: #8b949e; }
+  .j-resultado {
+    font-size: .9rem;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    margin-left: auto;
+  }
+  .j-resultado.pos { color: #3fb68b; }
+  .j-resultado.neg { color: #e05c5c; }
+
+  .j-setup-badge {
+    background: rgba(63,182,139,.12);
+    color: #3fb68b;
+    border: 1px solid rgba(63,182,139,.25);
+    font-size: .72rem;
+    padding: .2rem .55rem;
+    border-radius: 20px;
+    font-weight: 500;
+    letter-spacing: .03em;
+  }
+  .j-emocao-badge {
+    font-size: .72rem;
+    padding: .2rem .55rem;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+  .emocao-calmo     { background: rgba(63,182,139,.1);  color: #3fb68b; border: 1px solid rgba(63,182,139,.2); }
+  .emocao-confiante { background: rgba(56,139,253,.1);  color: #388bfd; border: 1px solid rgba(56,139,253,.2); }
+  .emocao-neutro    { background: rgba(184,196,206,.08); color: #8b949e; border: 1px solid rgba(184,196,206,.15); }
+  .emocao-ansioso   { background: rgba(210,153,34,.1);  color: #d2991e; border: 1px solid rgba(210,153,34,.2); }
+  .emocao-frustrado { background: rgba(224,92,92,.1);   color: #e05c5c; border: 1px solid rgba(224,92,92,.2); }
+
+  .j-tags { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
+  .j-tag {
+    background: rgba(184,196,206,.07);
+    color: #8b949e;
+    border: 1px solid #30363d;
+    font-size: .7rem;
+    padding: .15rem .45rem;
+    border-radius: 20px;
+  }
+
+  .j-qualidades {
+    display: flex;
+    gap: 1rem;
+    margin-top: .4rem;
+  }
+  .j-qual-item { font-size: .78rem; color: #8b949e; }
+  .j-qual-item span { color: #b8c4ce; font-weight: 600; }
+
+  .j-anotacao {
+    margin-top: .5rem;
+    font-size: .82rem;
+    color: #8b949e;
+    border-left: 2px solid #30363d;
+    padding-left: .75rem;
+    line-height: 1.5;
+  }
+
+  .qual-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 3px;
+  }
+  .qual-high   { background: #3fb68b; }
+  .qual-mid    { background: #d2991e; }
+  .qual-low    { background: #e05c5c; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #8b949e;
+  }
+  .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; display: block; opacity: .4; }
+
+  /* Summary strip */
+  .summary-strip {
+    display: flex;
+    gap: 1.5rem;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: .85rem 1.25rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .summary-item { font-size: .82rem; color: #8b949e; }
+  .summary-item strong { color: #e6edf3; font-size: .95rem; display: block; }
+</style>
+
+<div class="journal-page">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h4 class="mb-0" style="color:#e6edf3; font-weight:700;">
+        <i class="bi bi-journal-text me-2" style="color:#3fb68b;"></i>Journal de Operações
+      </h4>
+      <p class="mb-0 mt-1" style="font-size:.82rem; color:#8b949e;">
+        Anotações qualitativas, setups e análise de performance por estratégia
+      </p>
+    </div>
+    <span class="badge" style="background:rgba(63,182,139,.12); color:#3fb68b; border:1px solid rgba(63,182,139,.25); font-size:.82rem; padding:.4rem .8rem;">
+      {{ total_anotacoes }} anotaç{{ total_anotacoes|pluralize:"ão,ões" }}
+    </span>
+  </div>
+
+  <!-- Filter bar -->
+  <form method="get" class="filter-bar">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label mb-1">Setup</label>
+        <select name="setup" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for s in setups_disponiveis %}
+            <option value="{{ s }}" {% if filtros.setup == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1">Emoção</label>
+        <select name="emocao" class="form-select form-select-sm">
+          <option value="">Todas</option>
+          {% for val, lbl in emocao_choices %}
+            <option value="{{ val }}" {% if filtros.emocao == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1">Tag</label>
+        <input type="text" name="tag" class="form-control form-control-sm"
+               placeholder="ex: seguiu_plano" value="{{ filtros.tag }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1">De</label>
+        <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ filtros.data_ini }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label mb-1">Até</label>
+        <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ filtros.data_fim }}">
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-sm w-100" style="background:#3fb68b; color:#0d1117; font-weight:600;">
+          <i class="bi bi-funnel-fill me-1"></i>Filtrar
+        </button>
+        <a href="{% url 'trades:journal' %}" class="btn btn-sm" style="background:#21262d; color:#8b949e; border:1px solid #30363d;">
+          <i class="bi bi-x-lg"></i>
+        </a>
+      </div>
+    </div>
+  </form>
+
+  <!-- Métricas por setup -->
+  {% if metricas_setup %}
+  <div class="setup-card">
+    <div class="card-header">
+      <i class="bi bi-bar-chart-steps me-2"></i>Performance por Setup
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 setup-table">
+        <thead>
+          <tr>
+            <th>Setup</th>
+            <th class="text-center">Operações</th>
+            <th class="text-center">Win Rate</th>
+            <th class="text-end">Resultado Total</th>
+            <th class="text-end">Média/Op</th>
+            <th class="text-center">Ent. Média</th>
+            <th class="text-center">Saída Média</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in metricas_setup %}
+          <tr>
+            <td>
+              <span class="j-setup-badge">{{ m.setup }}</span>
+            </td>
+            <td class="text-center">{{ m.total }}</td>
+            <td class="text-center">
+              <span style="color:{% if m.win_rate >= 50 %}#3fb68b{% else %}#e05c5c{% endif %}; font-weight:600;">
+                {{ m.win_rate }}%
+              </span>
+            </td>
+            <td class="text-end" style="font-family:'JetBrains Mono',monospace; font-weight:600;
+              color:{% if m.resultado_total >= 0 %}#3fb68b{% else %}#e05c5c{% endif %};">
+              R$ {{ m.resultado_total|floatformat:2 }}
+            </td>
+            <td class="text-end" style="font-family:'JetBrains Mono',monospace;
+              color:{% if m.media_resultado >= 0 %}#3fb68b{% else %}#e05c5c{% endif %};">
+              R$ {{ m.media_resultado|floatformat:2 }}
+            </td>
+            <td class="text-center">
+              {% if m.q_entrada_media > 0 %}
+                <span class="qual-dot {% if m.q_entrada_media >= 7 %}qual-high{% elif m.q_entrada_media >= 4 %}qual-mid{% else %}qual-low{% endif %}"></span>
+                {{ m.q_entrada_media }}
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-center">
+              {% if m.q_saida_media > 0 %}
+                <span class="qual-dot {% if m.q_saida_media >= 7 %}qual-high{% elif m.q_saida_media >= 4 %}qual-mid{% else %}qual-low{% endif %}"></span>
+                {{ m.q_saida_media }}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Lista de journals -->
+  {% if journals %}
+    <!-- Summary strip -->
+    <div class="summary-strip">
+      <div class="summary-item">
+        <strong>{{ journals|length }}</strong>
+        Registros
+      </div>
+      {% if metricas_setup %}
+      <div class="summary-item">
+        <strong>{{ metricas_setup|length }}</strong>
+        Setup{{ metricas_setup|length|pluralize:"s" }}
+      </div>
+      {% endif %}
+    </div>
+
+    {% for j in journals %}
+    <div class="journal-card">
+      <div class="card-body">
+        <div class="journal-header">
+          <span class="j-ativo">{{ j.ativo }}</span>
+          {% if j.abertura %}
+            <span class="j-data">
+              <i class="bi bi-calendar3 me-1"></i>
+              {{ j.abertura|date:"d/m/Y" }}
+              <span style="margin-left:.3rem; color:#555f6d;">{{ j.abertura|date:"H:i" }}</span>
+            </span>
+          {% endif %}
+          {% if j.setup %}
+            <span class="j-setup-badge">{{ j.setup }}</span>
+          {% endif %}
+          {% if j.emocao_slug %}
+            <span class="j-emocao-badge emocao-{{ j.emocao_slug }}">
+              {{ j.emocao }}
+            </span>
+          {% endif %}
+          <span class="j-resultado {% if j.is_win %}pos{% else %}neg{% endif %}">
+            {% if j.is_win %}+{% endif %}R$ {{ j.resultado|floatformat:2 }}
+          </span>
+        </div>
+
+        {% if j.tags_lista %}
+        <div class="j-tags">
+          {% for tag in j.tags_lista %}
+            <span class="j-tag">#{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if j.qualidade_entrada or j.qualidade_saida %}
+        <div class="j-qualidades">
+          {% if j.qualidade_entrada %}
+          <div class="j-qual-item">
+            Entrada: <span>{{ j.qualidade_entrada }}/10</span>
+          </div>
+          {% endif %}
+          {% if j.qualidade_saida %}
+          <div class="j-qual-item">
+            Saída: <span>{{ j.qualidade_saida }}/10</span>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if j.anotacao %}
+        <div class="j-anotacao">{{ j.anotacao }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-journal-x"></i>
+    <p style="font-size:.95rem; color:#8b949e;">Nenhuma anotação encontrada para os filtros selecionados.</p>
+    <p style="font-size:.82rem;">Adicione anotações na página <a href="{% url 'trades:operacoes' %}" style="color:#3fb68b;">Operações</a>.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -26,10 +26,7 @@
     text-decoration: none;
     transition: border-color .15s, color .15s;
   }
-  .pag-btn:hover {
-    border-color: var(--accent-blue);
-    color: var(--accent-blue);
-  }
+  .pag-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
   .pag-btn.active {
     background: var(--accent-blue);
     border-color: var(--accent-blue);
@@ -37,11 +34,195 @@
     font-weight: 700;
     pointer-events: none;
   }
-  .pag-btn.disabled {
-    opacity: 0.3;
-    pointer-events: none;
-    cursor: default;
+  .pag-btn.disabled { opacity: 0.3; pointer-events: none; cursor: default; }
+
+  /* ── Journal button ── */
+  .btn-journal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
   }
+  .btn-journal:hover {
+    border-color: #3fb68b;
+    color: #3fb68b;
+    background: rgba(63,182,139,.08);
+  }
+  .btn-journal.has-journal {
+    border-color: rgba(63,182,139,.4);
+    color: #3fb68b;
+    background: rgba(63,182,139,.08);
+  }
+
+  /* ── Offcanvas drawer ── */
+  #journalDrawer {
+    background: #0d1117;
+    border-left: 1px solid #30363d;
+    width: 420px !important;
+  }
+  #journalDrawer .offcanvas-header {
+    border-bottom: 1px solid #21262d;
+    padding: 1.1rem 1.25rem;
+  }
+  #journalDrawer .offcanvas-title {
+    font-size: .9rem;
+    font-weight: 700;
+    color: #e6edf3;
+    letter-spacing: .02em;
+  }
+  #journalDrawer .offcanvas-body { padding: 1.25rem; }
+
+  .drawer-op-info {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: .75rem 1rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+  }
+  .drawer-ativo {
+    font-family: var(--font-mono, monospace);
+    font-size: .95rem;
+    font-weight: 700;
+    color: #e6edf3;
+  }
+  .drawer-resultado {
+    font-family: var(--font-mono, monospace);
+    font-size: .9rem;
+    font-weight: 600;
+    margin-left: auto;
+  }
+  .drawer-resultado.pos { color: #3fb68b; }
+  .drawer-resultado.neg { color: #e05c5c; }
+
+  /* Form fields inside drawer */
+  .j-form label {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #8b949e;
+    font-weight: 600;
+    margin-bottom: .35rem;
+    display: block;
+  }
+  .j-form .form-control,
+  .j-form .form-select {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #b8c4ce;
+    font-size: .85rem;
+    border-radius: 7px;
+    transition: border-color .15s;
+  }
+  .j-form .form-control:focus,
+  .j-form .form-select:focus {
+    background: #161b22;
+    border-color: #3fb68b;
+    color: #e6edf3;
+    box-shadow: 0 0 0 2px rgba(63,182,139,.15);
+  }
+  .j-form textarea { min-height: 90px; resize: vertical; }
+
+  /* Star rating for quality */
+  .quality-row { display: flex; align-items: center; gap: .5rem; }
+  .quality-label { min-width: 60px; font-size: .78rem; color: #8b949e; }
+  .quality-btns { display: flex; gap: 3px; }
+  .q-btn {
+    width: 28px; height: 28px;
+    border-radius: 5px;
+    border: 1px solid #30363d;
+    background: #161b22;
+    color: #555f6d;
+    font-size: .72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .12s;
+    font-family: var(--font-mono, monospace);
+  }
+  .q-btn:hover, .q-btn.selected { background: #3fb68b; border-color: #3fb68b; color: #0d1117; }
+  .q-btn.selected-mid { background: #d2991e; border-color: #d2991e; color: #0d1117; }
+  .q-btn.selected-low { background: #e05c5c; border-color: #e05c5c; color: #fff; }
+
+  /* Emotion chips */
+  .emocao-chips { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .emocao-chip {
+    padding: .3rem .7rem;
+    border-radius: 20px;
+    border: 1px solid #30363d;
+    background: transparent;
+    color: #8b949e;
+    font-size: .78rem;
+    cursor: pointer;
+    transition: all .12s;
+  }
+  .emocao-chip:hover { border-color: #444c56; color: #b8c4ce; }
+  .emocao-chip.selected-calmo     { background: rgba(63,182,139,.15);  border-color: #3fb68b; color: #3fb68b; }
+  .emocao-chip.selected-confiante { background: rgba(56,139,253,.15);  border-color: #388bfd; color: #388bfd; }
+  .emocao-chip.selected-neutro    { background: rgba(184,196,206,.1);  border-color: #8b949e; color: #b8c4ce; }
+  .emocao-chip.selected-ansioso   { background: rgba(210,153,34,.15);  border-color: #d2991e; color: #d2991e; }
+  .emocao-chip.selected-frustrado { background: rgba(224,92,92,.15);   border-color: #e05c5c; color: #e05c5c; }
+
+  /* Tags input */
+  .tags-hint { font-size: .72rem; color: #555f6d; margin-top: .25rem; }
+
+  /* Save button */
+  .btn-salvar-journal {
+    width: 100%;
+    padding: .6rem;
+    border-radius: 8px;
+    border: none;
+    background: #3fb68b;
+    color: #0d1117;
+    font-weight: 700;
+    font-size: .88rem;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    letter-spacing: .03em;
+  }
+  .btn-salvar-journal:hover { background: #34a87e; }
+  .btn-salvar-journal:active { transform: scale(.98); }
+  .btn-salvar-journal:disabled { opacity: .5; cursor: not-allowed; }
+
+  .save-feedback {
+    text-align: center;
+    font-size: .8rem;
+    margin-top: .5rem;
+    min-height: 1.2em;
+  }
+  .save-feedback.ok  { color: #3fb68b; }
+  .save-feedback.err { color: #e05c5c; }
+
+  /* Autocomplete suggestions */
+  .setup-suggestions {
+    position: absolute;
+    z-index: 9999;
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 7px;
+    overflow: hidden;
+    max-height: 160px;
+    overflow-y: auto;
+    display: none;
+    width: 100%;
+  }
+  .setup-suggestion-item {
+    padding: .45rem .85rem;
+    font-size: .83rem;
+    color: #b8c4ce;
+    cursor: pointer;
+  }
+  .setup-suggestion-item:hover { background: rgba(63,182,139,.1); color: #3fb68b; }
 </style>
 {% endblock %}
 
@@ -160,6 +341,9 @@
           <th style="text-align:right;">Resultado</th>
           <th>Tempo</th>
           <th style="text-align:right;">Acumulado</th>
+          <th style="text-align:center;width:44px;" title="Journal">
+            <i class="bi bi-journal-text" style="color:#3fb68b;font-size:13px;"></i>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -192,10 +376,30 @@
               <span class="val-neg">{{ op.total_acumulado|floatformat:2 }}</span>
             {% endif %}
           </td>
+          <td style="text-align:center;">
+            <button
+              class="btn-journal {% if op.has_journal %}has-journal{% endif %}"
+              title="{% if op.has_journal %}Ver/editar journal{% else %}Adicionar journal{% endif %}"
+              data-op-id="{{ op.pk }}"
+              data-ativo="{{ op.ativo }}"
+              data-resultado="{{ op.resultado_operacao }}"
+              data-is-win="{% if op.resultado_operacao >= 0 %}1{% else %}0{% endif %}"
+              data-abertura="{{ op.abertura_local|date:'d/m/Y H:i' }}"
+              data-setup="{{ op.journal_setup|default:'' }}"
+              data-tags="{{ op.journal_tags|default:'' }}"
+              data-emocao="{{ op.journal_emocao|default:'' }}"
+              data-q-entrada="{{ op.journal_q_entrada|default:'' }}"
+              data-q-saida="{{ op.journal_q_saida|default:'' }}"
+              data-anotacao="{{ op.journal_anotacao|default:'' }}"
+              onclick="abrirJournal(this)"
+            >
+              <i class="bi bi-journal{% if op.has_journal %}-check{% else %}-plus{% endif %}"></i>
+            </button>
+          </td>
         </tr>
         {% empty %}
         <tr>
-          <td colspan="9" style="text-align:center;padding:48px;color:var(--text-muted);">
+          <td colspan="10" style="text-align:center;padding:48px;color:var(--text-muted);">
             <i class="bi bi-inbox" style="font-size:28px;display:block;margin-bottom:8px;"></i>
             Nenhuma operação encontrada para o período selecionado.
           </td>
@@ -209,12 +413,10 @@
   {% if pagina_obj.paginator.num_pages > 1 %}
   <div style="padding:14px 20px;border-top:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">
 
-    <!-- << Primeira -->
     {% if pagina_obj.has_previous %}
       <a href="?{{ query_string }}&pagina=1" class="pag-btn" title="Primeira">
         <i class="bi bi-chevron-double-left"></i>
       </a>
-      <!-- < Anterior -->
       <a href="?{{ query_string }}&pagina={{ pagina_obj.previous_page_number }}" class="pag-btn" title="Anterior">
         <i class="bi bi-chevron-left"></i>
       </a>
@@ -223,7 +425,6 @@
       <span class="pag-btn disabled"><i class="bi bi-chevron-left"></i></span>
     {% endif %}
 
-    <!-- Botões numéricos -->
     {% for num in intervalo_paginas %}
       {% if num == pagina_obj.number %}
         <span class="pag-btn active">{{ num }}</span>
@@ -232,12 +433,10 @@
       {% endif %}
     {% endfor %}
 
-    <!-- Próxima > -->
     {% if pagina_obj.has_next %}
       <a href="?{{ query_string }}&pagina={{ pagina_obj.next_page_number }}" class="pag-btn" title="Próxima">
         <i class="bi bi-chevron-right"></i>
       </a>
-      <!-- Última >> -->
       <a href="?{{ query_string }}&pagina={{ pagina_obj.paginator.num_pages }}" class="pag-btn" title="Última">
         <i class="bi bi-chevron-double-right"></i>
       </a>
@@ -250,5 +449,305 @@
   {% endif %}
 
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     JOURNAL DRAWER (Offcanvas Bootstrap)
+═══════════════════════════════════════════════════════════ -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="journalDrawer" aria-labelledby="journalDrawerLabel">
+  <div class="offcanvas-header">
+    <div>
+      <h6 class="offcanvas-title mb-0" id="journalDrawerLabel">
+        <i class="bi bi-journal-text me-2" style="color:#3fb68b;"></i>Journal da Operação
+      </h6>
+      <div id="drawerSubtitle" style="font-size:.75rem;color:#8b949e;margin-top:.2rem;"></div>
+    </div>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Fechar"></button>
+  </div>
+
+  <div class="offcanvas-body">
+
+    <!-- Info da operação -->
+    <div class="drawer-op-info" id="drawerOpInfo">
+      <div>
+        <div class="drawer-ativo" id="drawerAtivo">—</div>
+        <div style="font-size:.75rem;color:#8b949e;" id="drawerData">—</div>
+      </div>
+      <div class="drawer-resultado" id="drawerResultado">—</div>
+    </div>
+
+    <!-- Hidden op_id -->
+    <input type="hidden" id="journalOpId" value="">
+
+    <!-- Formulário -->
+    <div class="j-form">
+
+      <!-- Setup -->
+      <div class="mb-3" style="position:relative;">
+        <label for="jSetup">Setup / Estratégia</label>
+        <input type="text" id="jSetup" class="form-control" placeholder="ex: Rompimento, Pullback, Gap..."
+               autocomplete="off" oninput="filtrarSugestoes(this.value)">
+        <div class="setup-suggestions" id="setupSuggestions"></div>
+      </div>
+
+      <!-- Tags -->
+      <div class="mb-3">
+        <label for="jTags">Tags</label>
+        <input type="text" id="jTags" class="form-control" placeholder="seguiu_plano, impulso, saida_cedo...">
+        <div class="tags-hint">Separe por vírgula · sem espaços entre palavras</div>
+      </div>
+
+      <!-- Emoção -->
+      <div class="mb-3">
+        <label>Estado Emocional</label>
+        <div class="emocao-chips" id="emocaoChips">
+          <button type="button" class="emocao-chip" data-val="calmo"     onclick="selecionarEmocao('calmo')">😌 Calmo</button>
+          <button type="button" class="emocao-chip" data-val="confiante" onclick="selecionarEmocao('confiante')">💪 Confiante</button>
+          <button type="button" class="emocao-chip" data-val="neutro"    onclick="selecionarEmocao('neutro')">😐 Neutro</button>
+          <button type="button" class="emocao-chip" data-val="ansioso"   onclick="selecionarEmocao('ansioso')">😰 Ansioso</button>
+          <button type="button" class="emocao-chip" data-val="frustrado" onclick="selecionarEmocao('frustrado')">😤 Frustrado</button>
+        </div>
+        <input type="hidden" id="jEmocao" value="">
+      </div>
+
+      <!-- Qualidade Entrada / Saída -->
+      <div class="mb-3">
+        <label>Qualidade da Execução</label>
+        <div class="d-flex flex-column gap-2">
+          <div class="quality-row">
+            <span class="quality-label">Entrada</span>
+            <div class="quality-btns" id="qEntradaBtns">
+              {% for i in "1234567890" %}{% endfor %}
+            </div>
+          </div>
+          <div class="quality-row">
+            <span class="quality-label">Saída</span>
+            <div class="quality-btns" id="qSaidaBtns">
+            </div>
+          </div>
+        </div>
+        <input type="hidden" id="jQEntrada" value="">
+        <input type="hidden" id="jQSaida" value="">
+      </div>
+
+      <!-- Anotação livre -->
+      <div class="mb-4">
+        <label for="jAnotacao">Anotação</label>
+        <textarea id="jAnotacao" class="form-control" placeholder="O que aconteceu nesta operação? O que faria diferente?"></textarea>
+      </div>
+
+      <!-- Salvar -->
+      <button class="btn-salvar-journal" id="btnSalvarJournal" onclick="salvarJournal()">
+        <i class="bi bi-floppy me-2"></i>Salvar Journal
+      </button>
+      <div class="save-feedback" id="saveFeedback"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── JavaScript ── -->
+<script>
+// Setups já cadastrados para autocomplete
+const setupsExistentes = [
+  {% for s in setups_existentes %}"{{ s }}"{% if not forloop.last %},{% endif %}{% endfor %}
+];
+
+// CSRF token
+function getCsrf() {
+  const name = 'csrftoken';
+  const cookies = document.cookie.split(';');
+  for (let c of cookies) {
+    const [k, v] = c.trim().split('=');
+    if (k === name) return decodeURIComponent(v);
+  }
+  return '';
+}
+
+// ── Abrir drawer com dados da operação ──────────────────────
+function abrirJournal(btn) {
+  const opId      = btn.dataset.opId;
+  const ativo     = btn.dataset.ativo;
+  const resultado = parseFloat(btn.dataset.resultado);
+  const isWin     = btn.dataset.isWin === '1';
+  const abertura  = btn.dataset.abertura;
+
+  // Dados do journal existente
+  const setup     = btn.dataset.setup    || '';
+  const tags      = btn.dataset.tags     || '';
+  const emocao    = btn.dataset.emocao   || '';
+  const qEntrada  = btn.dataset.qEntrada || '';
+  const qSaida    = btn.dataset.qSaida   || '';
+  const anotacao  = btn.dataset.anotacao || '';
+
+  // Preencher info card
+  document.getElementById('drawerAtivo').textContent     = ativo;
+  document.getElementById('drawerData').textContent      = abertura;
+  document.getElementById('journalOpId').value           = opId;
+  document.getElementById('drawerSubtitle').textContent  = 'Op #' + opId;
+
+  const resEl = document.getElementById('drawerResultado');
+  resEl.textContent  = (isWin ? '+' : '') + 'R$ ' + resultado.toFixed(2);
+  resEl.className    = 'drawer-resultado ' + (isWin ? 'pos' : 'neg');
+
+  // Preencher campos
+  document.getElementById('jSetup').value    = setup;
+  document.getElementById('jTags').value     = tags;
+  document.getElementById('jAnotacao').value = anotacao;
+  document.getElementById('jEmocao').value   = emocao;
+
+  selecionarEmocao(emocao, false); // sem toggle, só marca
+
+  renderQualityBtns('qEntradaBtns', 'jQEntrada', parseInt(qEntrada) || 0);
+  renderQualityBtns('qSaidaBtns',   'jQSaida',   parseInt(qSaida)   || 0);
+
+  // Limpar feedback
+  const fb = document.getElementById('saveFeedback');
+  fb.textContent = '';
+  fb.className = 'save-feedback';
+
+  // Abrir offcanvas
+  const drawer = new bootstrap.Offcanvas(document.getElementById('journalDrawer'));
+  drawer.show();
+}
+
+// ── Renderizar botões de qualidade (1-10) ──────────────────
+function renderQualityBtns(containerId, hiddenId, selected) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  for (let i = 1; i <= 10; i++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = i;
+    btn.className = 'q-btn';
+    if (i === selected) {
+      btn.classList.add(i >= 7 ? 'selected' : i >= 4 ? 'selected-mid' : 'selected-low');
+    }
+    btn.onclick = () => selecionarQualidade(containerId, hiddenId, i);
+    container.appendChild(btn);
+  }
+  document.getElementById(hiddenId).value = selected || '';
+}
+
+function selecionarQualidade(containerId, hiddenId, valor) {
+  const container = document.getElementById(containerId);
+  container.querySelectorAll('.q-btn').forEach((b, idx) => {
+    b.classList.remove('selected', 'selected-mid', 'selected-low');
+    const n = idx + 1;
+    if (n === valor) {
+      b.classList.add(n >= 7 ? 'selected' : n >= 4 ? 'selected-mid' : 'selected-low');
+    }
+  });
+  document.getElementById(hiddenId).value = valor;
+}
+
+// ── Selecionar emoção ──────────────────────────────────────
+function selecionarEmocao(val, toggle = true) {
+  const chips = document.querySelectorAll('#emocaoChips .emocao-chip');
+  const hidden = document.getElementById('jEmocao');
+  const current = hidden.value;
+
+  chips.forEach(c => {
+    c.className = 'emocao-chip'; // reset
+    if (c.dataset.val === val) {
+      if (toggle && current === val) {
+        // deselect
+        hidden.value = '';
+      } else {
+        c.classList.add('selected-' + val);
+        hidden.value = val;
+      }
+    }
+  });
+}
+
+// ── Autocomplete de setup ──────────────────────────────────
+function filtrarSugestoes(input) {
+  const box = document.getElementById('setupSuggestions');
+  if (!input || input.length < 1) { box.style.display = 'none'; return; }
+  const matches = setupsExistentes.filter(s =>
+    s.toLowerCase().includes(input.toLowerCase())
+  );
+  if (!matches.length) { box.style.display = 'none'; return; }
+  box.innerHTML = matches.map(s =>
+    `<div class="setup-suggestion-item" onclick="escolherSetup('${s}')">${s}</div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function escolherSetup(val) {
+  document.getElementById('jSetup').value = val;
+  document.getElementById('setupSuggestions').style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#jSetup') && !e.target.closest('#setupSuggestions')) {
+    document.getElementById('setupSuggestions').style.display = 'none';
+  }
+});
+
+// ── Salvar journal via AJAX ────────────────────────────────
+async function salvarJournal() {
+  const opId  = document.getElementById('journalOpId').value;
+  const btn   = document.getElementById('btnSalvarJournal');
+  const fb    = document.getElementById('saveFeedback');
+
+  if (!opId) return;
+
+  btn.disabled = true;
+  fb.textContent = 'Salvando...';
+  fb.className = 'save-feedback';
+
+  const formData = new FormData();
+  formData.append('setup',             document.getElementById('jSetup').value.trim());
+  formData.append('tags',              document.getElementById('jTags').value.trim());
+  formData.append('emocao',            document.getElementById('jEmocao').value);
+  formData.append('qualidade_entrada', document.getElementById('jQEntrada').value);
+  formData.append('qualidade_saida',   document.getElementById('jQSaida').value);
+  formData.append('anotacao',          document.getElementById('jAnotacao').value.trim());
+
+  try {
+    const resp = await fetch(`/journal/salvar/${opId}/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrf() },
+      body: formData,
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      fb.textContent = '✓ Salvo com sucesso';
+      fb.className = 'save-feedback ok';
+
+      // Atualizar botão na linha da tabela sem reload
+      const tableBtn = document.querySelector(`.btn-journal[data-op-id="${opId}"]`);
+      if (tableBtn) {
+        tableBtn.classList.add('has-journal');
+        tableBtn.title = 'Ver/editar journal';
+        tableBtn.querySelector('i').className = 'bi bi-journal-check';
+        // Atualizar data-* com valores salvos
+        tableBtn.dataset.setup     = document.getElementById('jSetup').value.trim();
+        tableBtn.dataset.tags      = document.getElementById('jTags').value.trim();
+        tableBtn.dataset.emocao    = document.getElementById('jEmocao').value;
+        tableBtn.dataset.qEntrada  = document.getElementById('jQEntrada').value;
+        tableBtn.dataset.qSaida    = document.getElementById('jQSaida').value;
+        tableBtn.dataset.anotacao  = document.getElementById('jAnotacao').value.trim();
+      }
+
+      // Fechar drawer após 900ms
+      setTimeout(() => {
+        bootstrap.Offcanvas.getInstance(document.getElementById('journalDrawer'))?.hide();
+      }, 900);
+
+    } else {
+      fb.textContent = '✗ Erro ao salvar. Tente novamente.';
+      fb.className = 'save-feedback err';
+    }
+  } catch (err) {
+    fb.textContent = '✗ Erro de conexão.';
+    fb.className = 'save-feedback err';
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
 
 {% endblock %}

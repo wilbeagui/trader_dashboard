@@ -12,8 +12,9 @@ from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.db.models import QuerySet
+from django.shortcuts import render, redirect, get_object_or_404
 
-from .models import ImportacaoArquivo, Operacao, ParametrosTrader, SessaoOperacao
+from .models import ImportacaoArquivo, Operacao, ParametrosTrader, SessaoOperacao, JournalOperacao
 from .services import importar_csv  # noqa: F401
 
 # ──────────────────────────────────────────────
@@ -841,6 +842,7 @@ def operacoes(request):
             total_losses += 1
     win_rate = (total_wins / total_operacoes * 100) if total_operacoes else 0.0
 
+    # Acumulado cronológico
     registros_cronologicos = list(reversed(registros))
     acumulado_periodo = 0.0
     registros_conv = []
@@ -850,10 +852,36 @@ def operacoes(request):
                           if abertura_utc and hasattr(abertura_utc, "astimezone")
                           else abertura_utc)
         acumulado_periodo += float(r["resultado_operacao"] or 0)
-        registros_conv.append({**r, "abertura_local": abertura_local,
-                               "total_acumulado": round(acumulado_periodo, 2)})
+        registros_conv.append({
+            **r,
+            "abertura_local": abertura_local,
+            "total_acumulado": round(acumulado_periodo, 2),
+        })
     registros_conv = list(reversed(registros_conv))
 
+    # ── Journal: enriquecer cada registro com dados do journal ──
+    todos_ids = [r["id"] for r in registros_conv]
+    journals_map = {
+        j.operacao_id: j
+        for j in JournalOperacao.objects.filter(operacao_id__in=todos_ids)
+    }
+    for r in registros_conv:
+        j = journals_map.get(r["id"])
+        r["has_journal"] = j is not None
+        r["journal_setup"] = j.setup if j else ""
+        r["journal_tags"] = j.tags if j else ""
+        r["journal_emocao"] = j.emocao if j else ""
+        r["journal_q_entrada"] = j.qualidade_entrada if j else ""
+        r["journal_q_saida"] = j.qualidade_saida if j else ""
+        r["journal_anotacao"] = j.anotacao if j else ""
+
+    # ── Setups existentes para autocomplete ──
+    setups_existentes = list(
+        JournalOperacao.objects.exclude(setup="")
+        .values_list("setup", flat=True).distinct().order_by("setup")
+    )
+
+    # Paginação
     paginator = Paginator(registros_conv, por_pagina)
     pagina_num = request.GET.get("pagina", 1)
     try:
@@ -876,20 +904,25 @@ def operacoes(request):
     query_string = get_sem_pagina.urlencode()
 
     context = {
-        "data_inicio": data_inicio, "data_fim": data_fim,
-        "instrumento": instrumento,
+        "data_inicio":        data_inicio,
+        "data_fim":           data_fim,
+        "instrumento":        instrumento,
         "ativos_disponiveis": ativos_agrupados,
-        "operacoes": pagina_obj, "pagina_obj": pagina_obj,
-        "intervalo_paginas": intervalo_paginas,
-        "query_string": query_string,
-        "total_operacoes": total_operacoes,
-        "resultado_total": round(total_res, 2),
-        "total_wins": int(total_wins), "total_losses": int(total_losses),
-        "win_rate": round(win_rate, 1),
-        "por_pagina": por_pagina, "opcoes_por_pagina": OPCOES_POR_PAGINA,
+        "operacoes":          pagina_obj,
+        "pagina_obj":         pagina_obj,
+        "intervalo_paginas":  intervalo_paginas,
+        "query_string":       query_string,
+        "total_operacoes":    total_operacoes,
+        "resultado_total":    round(total_res, 2),
+        "total_wins":         int(total_wins),
+        "total_losses":       int(total_losses),
+        "win_rate":           round(win_rate, 1),
+        "por_pagina":         por_pagina,
+        "opcoes_por_pagina":  OPCOES_POR_PAGINA,
+        # Journal
+        "setups_existentes":  setups_existentes,
     }
     return render(request, "trades/operacoes.html", context)
-
 
 def importar(request):
     resultado = None
@@ -1138,3 +1171,146 @@ def comportamental(request):
         **indicadores,
     }
     return render(request, "trades/comportamental.html", context)
+
+
+# ─── JOURNAL ──────────────────────────────────────────────────────────────────
+
+def journal(request):
+    """Página principal do journal com listagem e métricas por setup."""
+    import pytz
+    from django.db.models import Avg, Count, Sum
+
+    tz_sp = pytz.timezone('America/Sao_Paulo')
+
+    # Filtros
+    setup_filtro = request.GET.get('setup', '')
+    tag_filtro = request.GET.get('tag', '')
+    emocao_filtro = request.GET.get('emocao', '')
+    data_ini = request.GET.get('data_ini', '')
+    data_fim = request.GET.get('data_fim', '')
+
+    qs = JournalOperacao.objects.select_related('operacao').all()
+
+    if setup_filtro:
+        qs = qs.filter(setup__iexact=setup_filtro)
+    if emocao_filtro:
+        qs = qs.filter(emocao=emocao_filtro)
+    if tag_filtro:
+        qs = qs.filter(tags__icontains=tag_filtro)
+    if data_ini:
+        qs = qs.filter(operacao__abertura__date__gte=data_ini)
+    if data_fim:
+        qs = qs.filter(operacao__abertura__date__lte=data_fim)
+
+    # Converter datas para exibição
+    journals = []
+    for j in qs:
+        abertura_sp = j.operacao.abertura.astimezone(
+            tz_sp) if j.operacao.abertura else None
+        journals.append({
+            'id':               j.pk,
+            'op_id':            j.operacao.pk,
+            'ativo':            j.operacao.ativo,
+            'abertura':         abertura_sp,
+            'resultado':        j.operacao.resultado_operacao,
+            'is_win':           j.operacao.is_win,
+            'setup':            j.setup,
+            'tags_lista':       j.tags_lista(),
+            'emocao':           j.get_emocao_display(),
+            'emocao_slug':      j.emocao,
+            'qualidade_entrada': j.qualidade_entrada,
+            'qualidade_saida':  j.qualidade_saida,
+            'anotacao':         j.anotacao,
+        })
+
+    # Métricas por setup
+    setups_raw = (
+        JournalOperacao.objects
+        .exclude(setup='')
+        .values('setup')
+        .annotate(
+            total=Count('pk'),
+            resultado_total=Sum('operacao__resultado_operacao'),
+            q_entrada_media=Avg('qualidade_entrada'),
+            q_saida_media=Avg('qualidade_saida'),
+        )
+        .order_by('-resultado_total')
+    )
+
+    metricas_setup = []
+    for s in setups_raw:
+        ops_setup = JournalOperacao.objects.filter(setup__iexact=s['setup'])
+        wins = sum(1 for j in ops_setup if j.operacao.resultado_operacao > 0)
+        total = s['total']
+        win_rate = (wins / total * 100) if total else 0
+
+        # Expectativa matemática simplificada
+        resultados = [float(j.operacao.resultado_operacao) for j in ops_setup]
+        media = sum(resultados) / len(resultados) if resultados else 0
+
+        metricas_setup.append({
+            'setup':          s['setup'],
+            'total':          total,
+            'resultado_total': s['resultado_total'],
+            'win_rate':       round(win_rate, 1),
+            'media_resultado': round(media, 2),
+            'q_entrada_media': round(s['q_entrada_media'] or 0, 1),
+            'q_saida_media':  round(s['q_saida_media'] or 0, 1),
+        })
+
+    # Opções para filtros
+    setups_disponiveis = (
+        JournalOperacao.objects.exclude(setup='')
+        .values_list('setup', flat=True).distinct().order_by('setup')
+    )
+
+    context = {
+        'journals':           journals,
+        'metricas_setup':     metricas_setup,
+        'setups_disponiveis': setups_disponiveis,
+        'emocao_choices':     JournalOperacao.EMOCAO_CHOICES,
+        'filtros': {
+            'setup':    setup_filtro,
+            'tag':      tag_filtro,
+            'emocao':   emocao_filtro,
+            'data_ini': data_ini,
+            'data_fim': data_fim,
+        },
+        'total_anotacoes': qs.count(),
+    }
+    return render(request, 'trades/journal.html', context)
+
+
+def salvar_journal(request, op_id):
+    """Salva ou atualiza o journal de uma operação via POST."""
+    import json
+    from django.views.decorators.http import require_POST
+
+    if request.method != 'POST':
+        from django.http import JsonResponse
+        return JsonResponse({'ok': False, 'erro': 'Método não permitido'}, status=405)
+
+    operacao = get_object_or_404(Operacao, pk=op_id)
+    journal_obj, _ = JournalOperacao.objects.get_or_create(operacao=operacao)
+
+    journal_obj.setup = request.POST.get('setup', '').strip()
+    journal_obj.tags = request.POST.get('tags', '').strip()
+    journal_obj.emocao = request.POST.get('emocao', '')
+    journal_obj.anotacao = request.POST.get('anotacao', '').strip()
+
+    q_entrada = request.POST.get('qualidade_entrada', '')
+    q_saida = request.POST.get('qualidade_saida', '')
+    journal_obj.qualidade_entrada = int(
+        q_entrada) if q_entrada.isdigit() else None
+    journal_obj.qualidade_saida = int(q_saida) if q_saida.isdigit() else None
+
+    journal_obj.save()
+
+    # Resposta JSON para o drawer fechar sem reload de página
+    from django.http import JsonResponse
+    return JsonResponse({
+        'ok':      True,
+        'op_id':   op_id,
+        'setup':   journal_obj.setup,
+        'has_journal': True,
+    })
