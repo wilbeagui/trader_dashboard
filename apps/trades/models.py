@@ -170,6 +170,12 @@ class ParametrosTrader(models.Model):
         ),
     )
 
+    capital_inicial = models.DecimalField(
+        max_digits=12, 
+        decimal_places=2, 
+        default=0
+    )
+
     class Meta:
         verbose_name = 'Parâmetros do Trader'
         verbose_name_plural = 'Parâmetros do Trader'

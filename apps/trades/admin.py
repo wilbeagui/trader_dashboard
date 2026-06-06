@@ -32,6 +32,9 @@ class ParametrosTraderAdmin(admin.ModelAdmin):
         ('Limites Operacionais', {
             'fields': ['tempo_minimo_entre_trades', 'max_operacoes_dia']
         }),
+        ('Capital', {
+            'fields': ['capital_inicial']
+        }),
     ]
 
     def changelist_view(self, request, extra_context=None):

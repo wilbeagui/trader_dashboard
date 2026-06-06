@@ -105,6 +105,20 @@ def _qs_to_df(qs) -> pd.DataFrame:
     return df
 
 
+def _drawdown_maximo(df: pd.DataFrame) -> float:
+    """
+    Calcula o drawdown máximo do período.
+    Retorna o valor absoluto do maior recuo a partir do pico.
+    """
+    if df.empty:
+        return 0.0
+    df_ord = df.sort_values("abertura")
+    acumulado = df_ord["resultado_operacao"].astype(float).cumsum()
+    pico = acumulado.cummax()
+    drawdown = pico - acumulado
+    return float(drawdown.max())
+
+
 # ──────────────────────────────────────────────
 # Helpers de cálculo — dia()
 # ──────────────────────────────────────────────
@@ -762,10 +776,14 @@ def dashboard(request):
     data_inicio, data_fim, qs = _filtrar_operacoes(request)
     df = _qs_to_df(qs)
 
+    params = ParametrosTrader.carregar()
+    capital_inicial = float(params.capital_inicial)
+
     if df.empty:
         resultado_total = total_operacoes = total_wins = total_losses = 0
         win_rate = melhor_op = pior_op = 0.0
         total_sessoes = 0
+        drawdown_max = 0.0
     else:
         resultado_total = float(df["resultado_operacao"].sum())
         total_operacoes = len(df)
@@ -777,12 +795,21 @@ def dashboard(request):
         melhor_op = float(df["resultado_operacao"].max())
         pior_op = float(df["resultado_operacao"].min())
         total_sessoes = df["sessao__data_sessao"].nunique()
+        drawdown_max = _drawdown_maximo(df)
+
+    # Retorno % e Drawdown % sobre capital
+    if capital_inicial > 0:
+        retorno_pct = round(resultado_total / capital_inicial * 100, 2)
+        drawdown_pct = round(drawdown_max / capital_inicial * 100, 2)
+    else:
+        retorno_pct = None
+        drawdown_pct = None
 
     metricas_av = _calcular_metricas_avancadas(df)
 
     context = {
-        "data_inicio": data_inicio,
-        "data_fim":    data_fim,
+        "data_inicio":    data_inicio,
+        "data_fim":       data_fim,
         "resultado_total":  resultado_total,
         "total_operacoes":  total_operacoes,
         "total_wins":       total_wins,
@@ -791,17 +818,23 @@ def dashboard(request):
         "melhor_op":        melhor_op,
         "pior_op":          pior_op,
         "total_sessoes":    total_sessoes,
+        # Passo 2
+        "capital_inicial":  capital_inicial,
+        "retorno_pct":      retorno_pct,
+        "drawdown_max":     round(drawdown_max, 2),
+        "drawdown_pct":     drawdown_pct,
+        # Métricas avançadas
         "expectativa_matematica": metricas_av["expectativa_matematica"],
         "payoff_ratio":           metricas_av["payoff_ratio"],
         "gain_medio":             metricas_av["gain_medio"],
         "loss_medio":             metricas_av["loss_medio"],
+        # Gráficos
         "grafico_capital": _grafico_capital(df),
         "grafico_horario": _grafico_horario(df),
         "grafico_ativos":  _grafico_ativos(df),
         "grafico_heatmap": _grafico_heatmap(df),
     }
     return render(request, "trades/dashboard.html", context)
-
 
 def operacoes(request):
     data_inicio, data_fim, qs = _filtrar_operacoes(request)

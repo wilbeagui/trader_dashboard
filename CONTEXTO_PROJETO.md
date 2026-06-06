@@ -30,6 +30,7 @@ operacional.
 - Heat map de resultado por dia da semana × horário
 - Indicadores comportamentais (revenge trading, disciplina) ← IMPLEMENTADO
 - Journal de Operações ← IMPLEMENTADO (Passo 1)
+- Retorno % sobre Capital + Drawdown no Dashboard ← IMPLEMENTADO (Passo 2)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -155,12 +156,12 @@ Cada trade individual importado do Profitchart.
 - @property is_win → resultado_operacao > 0
 - @property duracao_minutos → (fechamento - abertura).total_seconds() / 60
 
-### ParametrosTrader
+### ParametrosTrader ← ATUALIZADO (Passo 2)
 Configuração singleton do trader. Editável via Django Admin.
 Preparado para futura migração a multi-usuário (adicionar FK User).
 - `tempo_minimo_entre_trades` → IntegerField(default=2)
 - `max_operacoes_dia`         → IntegerField(default=5)
-- `capital_inicial`           → DecimalField(12,2, default=0) ← A ADICIONAR (Passo 2)
+- `capital_inicial`           → DecimalField(12,2, default=0) ← ADICIONADO (Passo 2)
 - `meta_resultado_mensal`     → DecimalField(10,2, default=0) ← A ADICIONAR (Passo 20)
 - `drawdown_maximo_permitido` → DecimalField(10,2, default=0) ← A ADICIONAR (Passo 20)
 - Meta.verbose_name = "Parâmetros do Trader"
@@ -202,12 +203,15 @@ Observações do trader sobre o pregão como um todo.
 - `core/wsgi.py` → aponta para core.settings.development
 - `core/asgi.py` → aponta para core.settings.development
 - `manage.py` → aponta para core.settings.development
-- `apps/trades/models.py` → 5 models ativos (+ JournalOperacao implementado) + 1 a criar (AnotacaoDia)
+- `apps/trades/models.py` → 5 models ativos (JournalOperacao implementado;
+  ParametrosTrader atualizado com capital_inicial) + 1 a criar (AnotacaoDia)
 - `apps/trades/migrations/0001_initial.py` → migração inicial
 - `apps/trades/migrations/0002_parametrostrader.py` → migração ParametrosTrader
 - `apps/trades/migrations/0003_journaloperacao.py` → migração JournalOperacao (Passo 1)
-- `apps/trades/admin.py` → registra os 5 models; ParametrosTraderAdmin redireciona
-  listagem direto para edição, impede criação de segundo registro e impede exclusão;
+- `apps/trades/migrations/0004_parametrostrader_capital_inicial.py` → migração capital_inicial (Passo 2)
+- `apps/trades/admin.py` → registra os 5 models; ParametrosTraderAdmin com fieldsets
+  "Limites Operacionais" e "Capital"; redireciona listagem direto para edição,
+  impede criação de segundo registro e impede exclusão;
   JournalOperacaoAdmin com filtros por emocao e setup
 - `apps/trades/views.py` → 7 views ativas + helpers de cálculo e gráficos
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
@@ -216,7 +220,9 @@ Observações do trader sobre o pregão como um todo.
 - `apps/trades/services.py` → lógica de importação do CSV do Profitchart
 - `templates/base.html` → sidebar com todos os links de navegação incluindo Journal;
   .alert-warning e .val-warn no CSS global
-- `templates/trades/dashboard.html` → filter bar; 2 linhas de cards; 4 gráficos Plotly
+- `templates/trades/dashboard.html` → filter bar; 2 linhas de cards (linha 1:
+  Resultado Total, Win Rate, Retorno %, Drawdown Máx.; linha 2: Operações,
+  Wins/Losses, EM, Payoff Ratio); 4 gráficos Plotly
 - `templates/trades/dia.html` → 4 linhas de KPIs; 3 gráficos; tabela completa
 - `templates/trades/importar.html` → upload drag-and-drop + exclusão por data/ativo
 - `templates/trades/operacoes.html` → listagem com filtros, paginação, 4 cards;
@@ -257,6 +263,12 @@ Observações do trader sobre o pregão como um todo.
 - Journal: journals_map via query única com __in para não fazer N queries por operação
 - Journal: setups existentes passados ao template para autocomplete client-side
 - Journal: ícone da coluna muda para bi-journal-check (verde) ao anotar, sem reload
+- Drawdown: calculado via helper _drawdown_maximo(df); cumsum + cummax sobre df ordenado
+- Retorno %: exibido com sinal explícito (+/-); exibe "—" se capital_inicial == 0
+- Win Rate no Dashboard: cor baseada na EM (positiva = verde) em vez de limiar 50%
+  (Passo 9 antecipado no Passo 2)
+- Dashboard linha 1: Resultado Total · Win Rate · Retorno % · Drawdown Máx.
+- Dashboard linha 2: Operações · Wins/Losses · Expect. Matemática · Payoff Ratio
 
 ## Regras críticas — OBRIGATÓRIO seguir em qualquer alteração de views.py
 
@@ -296,7 +308,13 @@ Observações do trader sobre o pregão como um todo.
 
 ### ParametrosTrader
 - Sempre carregar via ParametrosTrader.carregar()
-- Referenciar como params.tempo_minimo_entre_trades, params.max_operacoes_dia etc.
+- Referenciar como params.tempo_minimo_entre_trades, params.max_operacoes_dia,
+  params.capital_inicial etc.
+
+### Drawdown (adicionado no Passo 2)
+- Helper _drawdown_maximo(df): ordena por abertura, cumsum, cummax, retorna max(pico - atual)
+- Reutilizar _drawdown_maximo() em qualquer view que precisar de drawdown
+- NUNCA recalcular drawdown inline nas views; sempre usar o helper
 
 ### Journal (regras adicionadas no Passo 1)
 - Enriquecer registros de operacoes() com dados do journal via query única:
@@ -305,6 +323,7 @@ Observações do trader sobre o pregão como um todo.
 - setups_existentes passados no context de operacoes() para autocomplete
 - salvar_journal() retorna JsonResponse({'ok': True, ...}); nunca redireciona
 - URL de salvar: /journal/salvar/<op_id>/ (sem prefixo extra — namespace trades está na raiz /)
+- r["pk"] = r["id"] obrigatório no loop de operacoes() para expor pk ao template
 
 ### Bootstrap Icons
 - Versão em uso: 1.11.3
@@ -339,6 +358,8 @@ Observações do trader sobre o pregão como um todo.
 ## Métricas avançadas implementadas
 - Expectativa Matemática → _calcular_metricas_avancadas(df); Dashboard
 - Payoff Ratio → mesma função; Dashboard e Dia
+- Drawdown Máximo → _drawdown_maximo(df); Dashboard (Passo 2)
+- Retorno % sobre Capital → dashboard(); requer capital_inicial > 0 (Passo 2)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades
@@ -379,36 +400,35 @@ por traders profissionais e o core de ferramentas como Edgewonk.
 - `journal.html` → página dedicada completa com filtros, tabela de performance
   por setup, listagem de anotações com todos os metadados
 - Link "Journal" adicionado ao sidebar do base.html
-- operacoes(): enriquecida com journals_map (query única com __in) e
-  setups_existentes para autocomplete
+- operacoes(): enriquecida com journals_map (query única com __in),
+  setups_existentes para autocomplete e r["pk"] = r["id"] para expor pk ao template
+
+**Bugs corrigidos durante implementação:**
+- r["pk"] = r["id"] no loop: dicts de .values() usam "id", template precisava de "pk"
+- {% csrf_token %} dentro do offcanvas: POST retornava 403 sem o token
 
 ---
 
-### PASSO 2 — Retorno % sobre Capital + Drawdown no Dashboard ★★★★★
+### PASSO 2 — Retorno % sobre Capital + Drawdown no Dashboard ★★★★★ ✅ CONCLUÍDO
 **Objetivo:** adicionar capital inicial configurável e exibir resultado
 como % do capital; adicionar drawdown máximo como card no dashboard.
-Sem retorno percentual, traders não conseguem comparar performance.
 
-**Arquivos a alterar:**
-- `apps/trades/models.py` → adicionar campo capital_inicial ao ParametrosTrader
-- `apps/trades/migrations/` → nova migração
-- `apps/trades/admin.py` → adicionar capital_inicial no fieldset de ParametrosTrader
-- `apps/trades/views.py` → dashboard():
-  - carregar params = ParametrosTrader.carregar()
-  - calcular retorno_pct = (resultado_total / capital_inicial * 100) se capital > 0
-  - calcular drawdown_max_periodo usando _drawdown_pico() sobre o df do período
-  - calcular drawdown_pct = (drawdown_max / capital_inicial * 100) se capital > 0
-  - passar ao context: retorno_pct, drawdown_max_periodo, drawdown_pct
-- `templates/trades/dashboard.html` → adicionar 2 cards na linha 1 ou criar linha 3:
-  - Card "Retorno %" com valor e cor dinâmica
-  - Card "Drawdown Máx." com valor absoluto e percentual no subtítulo
-  - Ajustar coloração do card Win Rate: verde/vermelho baseado em EM positiva/negativa
-    (não mais em win_rate >= 50%)
+**O que foi implementado:**
+- Campo `capital_inicial` adicionado ao model `ParametrosTrader`
+- Migração `0004_parametrostrader_capital_inicial.py`
+- `ParametrosTraderAdmin` atualizado com fieldset "Capital"
+- Helper `_drawdown_maximo(df)` adicionado ao views.py:
+  ordena por abertura → cumsum → cummax → retorna max(pico - acumulado)
+- `dashboard()` atualizada: carrega params, calcula drawdown_max, retorno_pct
+  e drawdown_pct (None se capital_inicial == 0)
+- `dashboard.html` reorganizado em 2 linhas de 4 cards cada:
+  - Linha 1: Resultado Total · Win Rate · Retorno % · Drawdown Máx.
+  - Linha 2: Operações · Wins/Losses · Expect. Matemática · Payoff Ratio
+- Win Rate antecipa Passo 9: cor baseada na EM (positiva = verde), não no limiar 50%
+- Retorno % e Drawdown % exibem "—" quando capital_inicial == 0
 
-**Detalhes de implementação:**
-- Se capital_inicial == 0, exibir "—" no lugar do percentual (não dividir por zero)
-- Drawdown já calculado na view dia(); extrair helper _drawdown_pico() para uso geral
-- Retorno % exibido com 2 casas decimais e sinal explícito (+/-)
+**Bug corrigido durante implementação:**
+- Typo "loss_edio" → "loss_medio" no context da dashboard()
 
 ---
 
@@ -511,6 +531,7 @@ no Dashboard. Visual padrão em todas plataformas profissionais.
 - Eixo Y do drawdown sempre negativo (zero = sem drawdown)
 - Exibir valor de drawdown máximo do período como anotação no gráfico
 - Usar tickprefix="R$ " e tickformat=",.0f" consistente com os demais
+- Reutilizar lógica do helper _drawdown_maximo(); não duplicar cálculo
 
 ---
 
@@ -528,14 +549,14 @@ sobre total de operações em vez de contagem absoluta.
 
 ---
 
-### PASSO 9 — Win Rate Contextualizado pela EM ★★★★☆
+### PASSO 9 — Win Rate Contextualizado pela EM ★★★★☆ — PARCIALMENTE ANTECIPADO
 **Objetivo:** remover coloração binária do Win Rate (>= 50% = verde).
 Colorir baseado na Expectativa Matemática (EM positiva = verde).
 
+**Status:** card Win Rate do Dashboard já implementado no Passo 2.
+Falta apenas o card Win Rate da página Dia.
+
 **Arquivos a alterar:**
-- `templates/trades/dashboard.html` → card Win Rate:
-  - Trocar condição de cor: usar expectativa_matematica >= 0 em vez de win_rate >= 50
-  - Subtítulo: adicionar contexto "EM positiva" ou "EM negativa"
 - `templates/trades/dia.html` → card Win Rate:
   - Mesma lógica usando payoff_ratio_dia como proxy (>= 1 = verde)
 
@@ -797,7 +818,7 @@ Visual diferenciado que facilita leitura do fluxo do dia.
 ### ORDEM DE EXECUÇÃO RECOMENDADA
 
 Fase 1 — Fundação analítica (implementar antes de qualquer outra coisa):
-  ~~Passo 1~~ ✅ → Passo 2 → Passo 3 → Passo 7 → Passo 9
+  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → Passo 3 → Passo 7 → Passo 9
 
 Fase 2 — Diferencial competitivo (o que vai vender o produto):
   ~~Passo 1~~ ✅ → Passo 6 → Passo 10 → Passo 14 → Passo 17
