@@ -339,6 +339,7 @@
           <th style="text-align:right;">P. Compra</th>
           <th style="text-align:right;">P. Venda</th>
           <th style="text-align:right;">Resultado</th>
+          <th style="text-align:right;">Pts</th>
           <th>Tempo</th>
           <th style="text-align:right;">Acumulado</th>
           <th style="text-align:center;width:44px;" title="Journal">
@@ -366,6 +367,13 @@
               <span class="val-pos">+{{ op.resultado_operacao|floatformat:2 }}</span>
             {% else %}
               <span class="val-neg">{{ op.resultado_operacao|floatformat:2 }}</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;font-family:var(--font-mono);font-size:12px;color:var(--text-muted);">
+            {% if op.resultado_operacao_pontos >= 0 %}
+              <span style="color:var(--positive);">+{{ op.resultado_operacao_pontos|floatformat:0 }}</span>
+            {% else %}
+              <span style="color:var(--negative);">{{ op.resultado_operacao_pontos|floatformat:0 }}</span>
             {% endif %}
           </td>
           <td style="color:var(--text-muted);">{{ op.tempo_operacao }}</td>
@@ -399,7 +407,7 @@
         </tr>
         {% empty %}
         <tr>
-          <td colspan="10" style="text-align:center;padding:48px;color:var(--text-muted);">
+          <td colspan="11" style="text-align:center;padding:48px;color:var(--text-muted);">
             <i class="bi bi-inbox" style="font-size:28px;display:block;margin-bottom:8px;"></i>
             Nenhuma operação encontrada para o período selecionado.
           </td>

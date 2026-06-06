@@ -95,16 +95,12 @@ class Operacao(models.Model):
     men = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     # Resultados em pontos
-    resultado_intervalo_pontos = models.DecimalField(
+    resultado_operacao_pontos = models.DecimalField(
         max_digits=10, decimal_places=2, default=0)
-    resultado_intervalo_pct = models.DecimalField(
-        max_digits=8, decimal_places=2, default=0)
 
     # Resultados financeiros (R$)
     resultado_operacao = models.DecimalField(
         max_digits=10, decimal_places=2, default=0)
-    resultado_operacao_pct = models.DecimalField(
-        max_digits=8, decimal_places=2, default=0)
 
     # Ganho e perda máximos possíveis
     ganho_maximo = models.DecimalField(

@@ -153,13 +153,9 @@ def importar_csv(arquivo, nome_arquivo):
                         row['Médio']) if converter_bool_medio(row['Médio']) else None,
                     mep=converter_decimal(row['MEP']),
                     men=converter_decimal(row['MEN']),
-                    resultado_intervalo_pontos=converter_decimal(
-                        row['Res. Intervalo Bruto']),
-                    resultado_intervalo_pct=converter_decimal(
-                        row['Res. Intervalo (%)']),
-                    resultado_operacao=resultado_op,
-                    resultado_operacao_pct=converter_decimal(
+                    resultado_operacao_pontos=converter_decimal(
                         row['Res. Operação (%)']),
+                    resultado_operacao=resultado_op,
                     ganho_maximo=converter_decimal(row['Ganho Max.']),
                     perda_maxima=converter_decimal(row['Perda Max.']),
                     total_acumulado=converter_decimal(row['Total'])

@@ -93,7 +93,7 @@ def _qs_to_df(qs) -> pd.DataFrame:
         "tempo_operacao", "qtd_compra", "qtd_venda",
         "preco_compra", "preco_venda",
         "resultado_operacao", "total_acumulado",
-        "sessao__data_sessao",
+        "sessao__data_sessao","resultado_operacao_pontos",
     ]
     registros = list(qs.values(*campos))
     if not registros:
@@ -784,6 +784,7 @@ def dashboard(request):
         win_rate = melhor_op = pior_op = 0.0
         total_sessoes = 0
         drawdown_max = 0.0
+        resultado_pontos = 0.0
     else:
         resultado_total = float(df["resultado_operacao"].sum())
         total_operacoes = len(df)
@@ -796,6 +797,7 @@ def dashboard(request):
         pior_op = float(df["resultado_operacao"].min())
         total_sessoes = df["sessao__data_sessao"].nunique()
         drawdown_max = _drawdown_maximo(df)
+        resultado_pontos = float(df["resultado_operacao_pontos"].sum())
 
     # Retorno % e Drawdown % sobre capital
     if capital_inicial > 0:
@@ -823,6 +825,7 @@ def dashboard(request):
         "retorno_pct":      retorno_pct,
         "drawdown_max":     round(drawdown_max, 2),
         "drawdown_pct":     drawdown_pct,
+        "resultado_pontos": round(resultado_pontos, 0) if not df.empty else 0,
         # Métricas avançadas
         "expectativa_matematica": metricas_av["expectativa_matematica"],
         "payoff_ratio":           metricas_av["payoff_ratio"],
@@ -861,6 +864,7 @@ def operacoes(request):
         "tempo_operacao", "qtd_compra", "qtd_venda",
         "preco_compra", "preco_venda",
         "resultado_operacao", "total_acumulado",
+        "resultado_operacao_pontos",
     ]
     registros = list(qs.order_by("-abertura").values(*campos))
 
@@ -1004,10 +1008,14 @@ def importar(request):
             erro = "Nenhum arquivo enviado."
         else:
             try:
-                importacao = importar_csv(arquivo)
-                resultado = importacao
-                messages.success(request,
-                                 f"{importacao.total_operacoes} operações importadas com sucesso.")
+                importacao = importar_csv(arquivo, arquivo.name)
+                if importacao['sucesso']:
+                    resultado = importacao
+                    messages.success(request,
+                                     f"{importacao['total_operacoes']} operações importadas com sucesso.")
+                else:
+                    erro = importacao['erro']
+                    messages.error(request, erro)
             except Exception as exc:  # noqa: BLE001
                 erro = str(exc)
                 messages.error(request, erro)
@@ -1053,6 +1061,7 @@ def dia(request):
         "preco_compra", "preco_venda", "preco_medio",
         "resultado_operacao", "total_acumulado",
         "mep", "men", "ganho_maximo", "perda_maxima",
+        "resultado_operacao_pontos",
     ]
     qs = (Operacao.objects.filter(abertura__date=data_sel)
           .order_by("abertura").values(*campos))
@@ -1072,6 +1081,7 @@ def dia(request):
     df["total_acumulado"] = df["resultado_operacao"].cumsum()
     df["mep"] = df["mep"].astype(float)
     df["men"] = df["men"].astype(float)
+    df["resultado_operacao_pontos"] = df["resultado_operacao_pontos"].astype(float)
 
     total_ops = len(df)
     resultado = float(df["resultado_operacao"].sum())
@@ -1129,6 +1139,7 @@ def dia(request):
             "mep":                row["mep"],
             "men":                row["men"],
             "resultado_operacao": row["resultado_operacao"],
+            "resultado_operacao_pontos":   row["resultado_operacao_pontos"],
             "tempo_operacao":     row["tempo_operacao"],
             "total_acumulado":    row["total_acumulado"],
         })

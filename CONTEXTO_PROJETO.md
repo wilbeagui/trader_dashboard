@@ -31,6 +31,7 @@ operacional.
 - Indicadores comportamentais (revenge trading, disciplina) ← IMPLEMENTADO
 - Journal de Operações ← IMPLEMENTADO (Passo 1)
 - Retorno % sobre Capital + Drawdown no Dashboard ← IMPLEMENTADO (Passo 2)
+- Resultado em Pontos ← IMPLEMENTADO (Passo 3)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -127,7 +128,7 @@ Agrupa operações por dia de pregão.
 - unique_together: ['importacao', 'data_sessao']
 - @property win_rate → (total_wins / total_operacoes) * 100
 
-### Operacao
+### Operacao ← ATUALIZADO (Passo 3)
 Cada trade individual importado do Profitchart.
 - `sessao` → FK(SessaoOperacao, cascade) related_name='operacoes'
 - `importacao` → FK(ImportacaoArquivo, cascade) related_name='operacoes'
@@ -146,15 +147,21 @@ Cada trade individual importado do Profitchart.
 - `preco_medio` → DecimalField(12,2, blank, null)
 - `mep` → DecimalField(10,2)
 - `men` → DecimalField(10,2)
-- `resultado_intervalo_pontos` → DecimalField(10,2)
-- `resultado_intervalo_pct` → DecimalField(8,2)
+- `resultado_operacao_pontos` → DecimalField(10,2) ← RENOMEADO/CORRIGIDO (Passo 3)
+  fonte CSV: coluna 'Res. Operação (%)' — para futuros representa pontos,
+  para ações representa percentual
 - `resultado_operacao` → DecimalField(10,2)
-- `resultado_operacao_pct` → DecimalField(8,2)
+  fonte CSV: coluna 'Res. Operação' — resultado em R$
 - `ganho_maximo` → DecimalField(10,2)
 - `perda_maxima` → DecimalField(10,2)
 - `total_acumulado` → DecimalField(10,2)
 - @property is_win → resultado_operacao > 0
 - @property duracao_minutos → (fechamento - abertura).total_seconds() / 60
+
+Campos REMOVIDOS no Passo 3:
+- ~~resultado_intervalo_pontos~~ → substituído por resultado_operacao_pontos
+- ~~resultado_intervalo_pct~~ → removido (redundante)
+- ~~resultado_operacao_pct~~ → removido (redundante)
 
 ### ParametrosTrader ← ATUALIZADO (Passo 2)
 Configuração singleton do trader. Editável via Django Admin.
@@ -203,12 +210,14 @@ Observações do trader sobre o pregão como um todo.
 - `core/wsgi.py` → aponta para core.settings.development
 - `core/asgi.py` → aponta para core.settings.development
 - `manage.py` → aponta para core.settings.development
-- `apps/trades/models.py` → 5 models ativos (JournalOperacao implementado;
-  ParametrosTrader atualizado com capital_inicial) + 1 a criar (AnotacaoDia)
+- `apps/trades/models.py` → 5 models ativos (Operacao atualizado no Passo 3;
+  JournalOperacao implementado; ParametrosTrader atualizado) + 1 a criar (AnotacaoDia)
 - `apps/trades/migrations/0001_initial.py` → migração inicial
 - `apps/trades/migrations/0002_parametrostrader.py` → migração ParametrosTrader
 - `apps/trades/migrations/0003_journaloperacao.py` → migração JournalOperacao (Passo 1)
 - `apps/trades/migrations/0004_parametrostrader_capital_inicial.py` → migração capital_inicial (Passo 2)
+- `apps/trades/migrations/0005_operacao_passo3.py` → migração Passo 3: remove campos
+  obsoletos, renomeia resultado_intervalo_pontos → resultado_operacao_pontos
 - `apps/trades/admin.py` → registra os 5 models; ParametrosTraderAdmin com fieldsets
   "Limites Operacionais" e "Capital"; redireciona listagem direto para edição,
   impede criação de segundo registro e impede exclusão;
@@ -217,22 +226,21 @@ Observações do trader sobre o pregão como um todo.
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
   /journal/, /journal/salvar/<op_id>/
-- `apps/trades/services.py` → lógica de importação do CSV do Profitchart
+- `apps/trades/services.py` → lógica de importação do CSV do Profitchart;
+  mapeamento corrigido no Passo 3: resultado_operacao_pontos ← 'Res. Operação (%)',
+  resultado_operacao ← 'Res. Operação'; chamada corrigida na view importar():
+  importar_csv(arquivo, arquivo.name) com retorno tratado como dict
 - `templates/base.html` → sidebar com todos os links de navegação incluindo Journal;
   .alert-warning e .val-warn no CSS global
 - `templates/trades/dashboard.html` → filter bar; 2 linhas de cards (linha 1:
-  Resultado Total, Win Rate, Retorno %, Drawdown Máx.; linha 2: Operações,
-  Wins/Losses, EM, Payoff Ratio); 4 gráficos Plotly
-- `templates/trades/dia.html` → 4 linhas de KPIs; 3 gráficos; tabela completa
+  Resultado Total com subtítulo pts, Win Rate, Retorno %, Drawdown Máx.;
+  linha 2: Operações, Wins/Losses, EM, Payoff Ratio); 4 gráficos Plotly
+- `templates/trades/dia.html` → 4 linhas de KPIs; 3 gráficos; tabela com coluna Pts
 - `templates/trades/importar.html` → upload drag-and-drop + exclusão por data/ativo
 - `templates/trades/operacoes.html` → listagem com filtros, paginação, 4 cards;
-  coluna Journal com botão por linha; offcanvas drawer Bootstrap com formulário
-  completo (setup + autocomplete, tags, emoção em chips, qualidade 1-10, anotação);
-  salvo via AJAX sem reload; ícone muda de cor ao anotar
+  coluna Pts na tabela; coluna Journal com botão por linha; offcanvas drawer Bootstrap
 - `templates/trades/comportamental.html` → 5 seções de indicadores comportamentais
-- `templates/trades/journal.html` → página dedicada com filtros (setup, emoção, tag,
-  período); tabela de métricas por setup (win rate, resultado, média/op, qualidade
-  entrada/saída); listagem de anotações com badges de tags e emoção
+- `templates/trades/journal.html` → página dedicada com filtros e métricas por setup
 - `.env` → variáveis de ambiente (SECRET_KEY, DEBUG)
 - `.gitignore` → arquivos ignorados pelo Git
 
@@ -266,9 +274,15 @@ Observações do trader sobre o pregão como um todo.
 - Drawdown: calculado via helper _drawdown_maximo(df); cumsum + cummax sobre df ordenado
 - Retorno %: exibido com sinal explícito (+/-); exibe "—" se capital_inicial == 0
 - Win Rate no Dashboard: cor baseada na EM (positiva = verde) em vez de limiar 50%
-  (Passo 9 antecipado no Passo 2)
 - Dashboard linha 1: Resultado Total · Win Rate · Retorno % · Drawdown Máx.
 - Dashboard linha 2: Operações · Wins/Losses · Expect. Matemática · Payoff Ratio
+- Pontos (resultado_operacao_pontos): coluna 'Res. Operação (%)' do CSV do Profitchart;
+  para futuros (WIN/WDO) representa pontos; para ações representa percentual;
+  exibido com 0 casas decimais nas tabelas; somado e exibido no subtítulo do card
+  Resultado Total do dashboard
+- importar_csv(): retorna dict {'sucesso', 'total_operacoes', ...}; view trata como dict
+- Quantidade de contratos (qtd_compra/qtd_venda): já existe no model e é importada;
+  impacto em pontos vs R$ a ser tratado em passo futuro (PASSO 3-B planejado)
 
 ## Regras críticas — OBRIGATÓRIO seguir em qualquer alteração de views.py
 
@@ -316,6 +330,20 @@ Observações do trader sobre o pregão como um todo.
 - Reutilizar _drawdown_maximo() em qualquer view que precisar de drawdown
 - NUNCA recalcular drawdown inline nas views; sempre usar o helper
 
+### Resultado em Pontos (adicionado no Passo 3)
+- Campo no model: resultado_operacao_pontos (DecimalField 10,2)
+- Fonte CSV: coluna 'Res. Operação (%)' — NÃO é percentual para futuros, são pontos
+- NUNCA referenciar resultado_intervalo_pontos (removido), resultado_intervalo_pct
+  (removido) ou resultado_operacao_pct (removido)
+- Sempre incluir 'resultado_operacao_pontos' na lista campos[] das views
+- Exibir com floatformat:0 nas tabelas (WIN/WDO operam em pontos inteiros)
+
+### importar_csv() (corrigido no Passo 3)
+- Assinatura: importar_csv(arquivo, nome_arquivo) — dois argumentos obrigatórios
+- Retorna dict: {'sucesso': bool, 'total_operacoes': int, ...}
+- Na view importar(): chamar como importar_csv(arquivo, arquivo.name)
+- Tratar retorno como dict: importacao['total_operacoes'], não importacao.total_operacoes
+
 ### Journal (regras adicionadas no Passo 1)
 - Enriquecer registros de operacoes() com dados do journal via query única:
   journals_map = {j.operacao_id: j for j in JournalOperacao.objects.filter(operacao_id__in=todos_ids)}
@@ -333,10 +361,11 @@ Observações do trader sobre o pregão como um todo.
 - Criar arquivos vazios: New-Item nomedoarquivo
 
 ## Estado atual do banco
-- 39 operações importadas
+- Operações reimportadas após limpeza no Passo 3
 - 15 dias de pregão
 - Período: novembro/2025 até maio/2026
 - Instrumento: WIN (mini índice) em vários vencimentos
+- Nota: identificada operação com 2 contratos — impacto em pontos vs R$ a tratar (Passo 3-B)
 
 ## Gráficos implementados
 
@@ -360,6 +389,7 @@ Observações do trader sobre o pregão como um todo.
 - Payoff Ratio → mesma função; Dashboard e Dia
 - Drawdown Máximo → _drawdown_maximo(df); Dashboard (Passo 2)
 - Retorno % sobre Capital → dashboard(); requer capital_inicial > 0 (Passo 2)
+- Resultado em Pontos → resultado_operacao_pontos; Dashboard (subtítulo), Dia e Operações (Passo 3)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades
@@ -378,80 +408,85 @@ o que fazer, quais arquivos alterar e os detalhes de implementação.
 ---
 
 ### PASSO 1 — Journal de Operações ★★★★★ ✅ CONCLUÍDO
-**Objetivo:** permitir que o trader anote motivo, setup, emoção e
-qualidade de cada operação individualmente. É o recurso mais valorizado
-por traders profissionais e o core de ferramentas como Edgewonk.
-
 **O que foi implementado:**
-- Model `JournalOperacao` (OneToOne com Operacao): setup, tags, emocao, qualidade_entrada,
-  qualidade_saida, anotacao, criado_em, atualizado_em; método tags_lista()
+- Model `JournalOperacao` (OneToOne com Operacao): setup, tags, emocao,
+  qualidade_entrada, qualidade_saida, anotacao, criado_em, atualizado_em; tags_lista()
 - Migração `0003_journaloperacao.py`
 - `JournalOperacaoAdmin` registrado com filtros por emocao e setup
-- View `journal()` → página /journal/ com filtros por setup/emoção/tag/período;
-  métricas por setup (win rate, resultado total, média/op, qualidade entrada/saída);
-  listagem com badges de tags e emoção coloridos
-- View `salvar_journal()` → POST /journal/salvar/<op_id>/; retorna JsonResponse;
-  cria ou atualiza JournalOperacao via get_or_create
-- `operacoes.html` → coluna Journal na tabela com botão por linha (bi-journal-plus /
-  bi-journal-check); offcanvas drawer Bootstrap com: campo setup + autocomplete
-  client-side, campo tags com hint, chips de emoção, botões de qualidade 1-10
-  coloridos por faixa, textarea de anotação, botão salvar via AJAX; ícone e cor
-  do botão atualizados sem reload após salvar
-- `journal.html` → página dedicada completa com filtros, tabela de performance
-  por setup, listagem de anotações com todos os metadados
-- Link "Journal" adicionado ao sidebar do base.html
-- operacoes(): enriquecida com journals_map (query única com __in),
-  setups_existentes para autocomplete e r["pk"] = r["id"] para expor pk ao template
+- View `journal()` → /journal/ com filtros, métricas por setup, listagem com badges
+- View `salvar_journal()` → POST /journal/salvar/<op_id>/; JsonResponse; get_or_create
+- `operacoes.html` → coluna Journal; offcanvas drawer com formulário completo; AJAX
+- `journal.html` → página dedicada completa
+- Link "Journal" no sidebar do base.html
+- operacoes(): journals_map (query única __in), setups_existentes, r["pk"] = r["id"]
 
-**Bugs corrigidos durante implementação:**
-- r["pk"] = r["id"] no loop: dicts de .values() usam "id", template precisava de "pk"
+**Bugs corrigidos:**
+- r["pk"] = r["id"]: dicts de .values() usam "id", template precisava de "pk"
 - {% csrf_token %} dentro do offcanvas: POST retornava 403 sem o token
 
 ---
 
 ### PASSO 2 — Retorno % sobre Capital + Drawdown no Dashboard ★★★★★ ✅ CONCLUÍDO
-**Objetivo:** adicionar capital inicial configurável e exibir resultado
-como % do capital; adicionar drawdown máximo como card no dashboard.
-
 **O que foi implementado:**
-- Campo `capital_inicial` adicionado ao model `ParametrosTrader`
+- Campo `capital_inicial` no model `ParametrosTrader`
 - Migração `0004_parametrostrader_capital_inicial.py`
-- `ParametrosTraderAdmin` atualizado com fieldset "Capital"
-- Helper `_drawdown_maximo(df)` adicionado ao views.py:
-  ordena por abertura → cumsum → cummax → retorna max(pico - acumulado)
-- `dashboard()` atualizada: carrega params, calcula drawdown_max, retorno_pct
-  e drawdown_pct (None se capital_inicial == 0)
-- `dashboard.html` reorganizado em 2 linhas de 4 cards cada:
-  - Linha 1: Resultado Total · Win Rate · Retorno % · Drawdown Máx.
-  - Linha 2: Operações · Wins/Losses · Expect. Matemática · Payoff Ratio
-- Win Rate antecipa Passo 9: cor baseada na EM (positiva = verde), não no limiar 50%
-- Retorno % e Drawdown % exibem "—" quando capital_inicial == 0
+- `ParametrosTraderAdmin` com fieldset "Capital"
+- Helper `_drawdown_maximo(df)`: ordena → cumsum → cummax → max(pico - acumulado)
+- `dashboard()`: carrega params, calcula drawdown_max, retorno_pct, drawdown_pct
+- `dashboard.html` reorganizado: linha 1 (Resultado, Win Rate, Retorno %, Drawdown),
+  linha 2 (Operações, Wins/Losses, EM, Payoff Ratio)
+- Win Rate: cor baseada na EM (antecipa Passo 9)
 
-**Bug corrigido durante implementação:**
+**Bug corrigido:**
 - Typo "loss_edio" → "loss_medio" no context da dashboard()
 
 ---
 
-### PASSO 3 — Resultado em Pontos ★★★★★
-**Objetivo:** exibir resultado em pontos do contrato além de R$ em
-todas as telas relevantes. Traders de futuros pensam em pontos primeiro.
+### PASSO 3 — Resultado em Pontos ★★★★★ ✅ CONCLUÍDO
+**O que foi implementado:**
+- Model `Operacao` reestruturado:
+  - Removidos: resultado_intervalo_pontos, resultado_intervalo_pct, resultado_operacao_pct
+  - Adicionado: resultado_operacao_pontos ← CSV 'Res. Operação (%)'
+  - Mantido: resultado_operacao ← CSV 'Res. Operação'
+- Migração `0005_operacao_passo3.py`
+- `services.py` corrigido: mapeamento correto dos dois campos; remoção dos três
+  campos obsoletos do Operacao.objects.create()
+- `views.py`: resultado_operacao_pontos adicionado em campos[] de dia() e operacoes();
+  resultado_pontos calculado em dashboard() e passado ao context
+- `dashboard.html`: subtítulo do card Resultado Total exibe "· +632 pts"
+- `dia.html`: coluna "Pts" na tabela colorida em fonte mono
+- `operacoes.html`: coluna "Pts" na tabela; colspan do empty atualizado para 11
 
-**Arquivos a alterar:**
-- `apps/trades/views.py`:
-  - dashboard(): calcular resultado_pontos = soma de resultado_intervalo_pontos
-  - dia(): adicionar coluna resultado_intervalo_pontos no DataFrame e na tabela
-  - operacoes(): adicionar resultado_intervalo_pontos no .values() e na listagem
-- `templates/trades/dashboard.html` → subtítulo do card Resultado Total:
-  "R$ X.XXX · Y.YYY pts"
-- `templates/trades/dia.html` → coluna adicional na tabela: "Pts"
-  entre Resultado e Duração
-- `templates/trades/operacoes.html` → coluna adicional "Pts" na tabela
+**Bugs corrigidos durante implementação:**
+- importar_csv() chamada sem nome_arquivo → corrigido para importar_csv(arquivo, arquivo.name)
+- Retorno de importar_csv() tratado como objeto → corrigido para dict: importacao['total_operacoes']
+- resultado_operacao_pontos recebia valor errado (igual a resultado_operacao) pois
+  apontava para coluna CSV errada ('Res. Intervalo Bruto' → corrigido para 'Res. Operação (%)')
 
-**Detalhes de implementação:**
-- resultado_intervalo_pontos já existe no model e é importado do CSV
-- Exibir com 0 casas decimais para WIN/IND (contrato inteiro) e
-  2 casas para WDO/DOL (frações de ponto)
-- No dashboard, somar os pontos do período filtrado e exibir no subtítulo do card
+**Observação registrada:**
+- Identificada operação com 2 contratos no histórico; diferença entre pontos e R$
+  ocorre quando qtd_compra/qtd_venda > 1; tratamento planejado como PASSO 3-B
+
+---
+
+### PASSO 3-B — Normalização de Pontos por Contrato ← PLANEJADO
+**Objetivo:** garantir que a exibição de pontos seja sempre por contrato,
+independente da quantidade operada. Evita distorção onde 2 contratos com
+50 pts cada aparecem como 100 pts totais, mascarando a eficiência real.
+
+**Contexto:** qtd_compra e qtd_venda já existem no model e são importados.
+resultado_operacao_pontos atual reflete o total da operação (pontos × contratos).
+
+**Decisão a tomar antes de implementar:**
+- Exibir pontos por contrato (resultado_operacao_pontos / qtd_compra)?
+- Exibir pontos totais da operação (comportamento atual)?
+- Exibir ambos?
+
+**Arquivos a alterar (após decisão):**
+- `apps/trades/views.py`: normalizar resultado_operacao_pontos / qtd_compra
+  nas views dia(), operacoes() e dashboard() se optar por pontos por contrato
+- `templates/trades/dia.html`, `operacoes.html`, `dashboard.html`:
+  ajustar label da coluna (ex: "Pts/ctr" em vez de "Pts")
 
 ---
 
@@ -483,9 +518,7 @@ comparativo mês a mês; base para exportação PDF.
 ---
 
 ### PASSO 5 — Resultado em Pontos na Tabela do Dia ★★★★☆
-**Objetivo:** adicionar coluna de pontos na tabela da página Dia.
-Baixíssima complexidade, alto valor para traders de futuros.
-(Implementado em conjunto com Passo 3)
+**Status:** implementado junto com Passo 3. ✅ CONCLUÍDO
 
 ---
 
@@ -550,9 +583,6 @@ sobre total de operações em vez de contagem absoluta.
 ---
 
 ### PASSO 9 — Win Rate Contextualizado pela EM ★★★★☆ — PARCIALMENTE ANTECIPADO
-**Objetivo:** remover coloração binária do Win Rate (>= 50% = verde).
-Colorir baseado na Expectativa Matemática (EM positiva = verde).
-
 **Status:** card Win Rate do Dashboard já implementado no Passo 2.
 Falta apenas o card Win Rate da página Dia.
 
@@ -564,41 +594,28 @@ Falta apenas o card Win Rate da página Dia.
 
 ### PASSO 10 — Análise por Setup/Tag ★★★★☆
 **Objetivo:** agrupar métricas por setup e tag do journal.
-Permite identificar quais estratégias funcionam de verdade.
 **Depende do Passo 1 (Journal). ✅ Passo 1 concluído.**
 
 **Arquivos a criar/alterar:**
 - `apps/trades/views.py` → nova view analise_setup():
   - JOIN entre Operacao e JournalOperacao
-  - Agrupar por setup: calcular resultado total, win rate, EM, payoff ratio,
+  - Agrupar por setup: resultado total, win rate, EM, payoff ratio,
     média de qualidade de entrada/saída, total de operações
   - Agrupar por tag: mesmas métricas
-  - Passar listas ao context
 - `apps/trades/urls.py` → rota /analise-setup/
-- `templates/trades/analise_setup.html` → criar página com:
-  - Tabela de performance por setup com todas as métricas
-  - Tabela de performance por tag
-  - Gráfico de barras de resultado por setup
-  - Gráfico de barras de resultado por tag
-- `templates/base.html` → adicionar link no sidebar (seção Análise)
+- `templates/trades/analise_setup.html` → tabelas + gráficos por setup e tag
+- `templates/base.html` → link no sidebar
 
 ---
 
 ### PASSO 11 — Correlação Overtrading × Revenge ★★★☆☆
 **Objetivo:** seção de correlação cruzada entre indicadores comportamentais.
-"Nos dias de overtrading, o revenge trading aumentou X%."
 
 **Arquivos a alterar:**
 - `apps/trades/views.py` → _calcular_comportamental():
-  - Identificar dias de overtrading
-  - Nesses dias, calcular taxa de revenge trading
-  - Comparar com taxa de revenge nos dias normais
-  - Calcular correlação de Pearson entre qtd_ops_dia e n_revenge_dia
-  - Retornar: corr_overtrade_revenge, revenge_pct_dias_normais,
-    revenge_pct_dias_overtrade
-- `templates/trades/comportamental.html` → nova seção ao final:
-  - Card com correlação e interpretação textual automática
-  - Ex: "Em dias de overtrading, revenge trading foi 3x mais frequente"
+  - Correlação de Pearson entre qtd_ops_dia e n_revenge_dia
+  - Retornar: corr_overtrade_revenge, revenge_pct_dias_normais, revenge_pct_dias_overtrade
+- `templates/trades/comportamental.html` → nova seção com interpretação textual automática
 
 ---
 
@@ -606,28 +623,16 @@ Permite identificar quais estratégias funcionam de verdade.
 **Objetivo:** comparar dois períodos lado a lado com delta de cada métrica.
 
 **Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view comparativo():
-  - Parâmetros GET: periodo1_inicio, periodo1_fim, periodo2_inicio, periodo2_fim
-  - Calcular todas as métricas para cada período
-  - Calcular delta absoluto e percentual de cada métrica
+- `apps/trades/views.py` → nova view comparativo()
 - `apps/trades/urls.py` → rota /comparativo/
-- `templates/trades/comparativo.html` → criar página com:
-  - Dois filtros de período lado a lado
-  - Tabela de métricas com colunas: Métrica | Período 1 | Período 2 | Delta
-  - Delta colorido (verde = melhora, vermelho = piora)
+- `templates/trades/comparativo.html` → tabela Métrica | Período 1 | Período 2 | Delta
 - `templates/base.html` → link no sidebar
 
 ---
 
 ### PASSO 13 — Volume por Ativo com Nº de Operações ★★★☆☆
-**Objetivo:** exibir qtd de operações nas barras do gráfico de ativos.
-Evita distorção de um ativo com 1 operação boa.
-
 **Arquivos a alterar:**
-- `apps/trades/views.py` → _grafico_ativos():
-  - Agrupar também por count de operações
-  - Adicionar texttemplate no go.Bar com qtd de ops
-  - Adicionar hover com resultado e qtd de operações
+- `apps/trades/views.py` → _grafico_ativos(): count de operações + texttemplate + hover
 
 ---
 
@@ -635,199 +640,89 @@ Evita distorção de um ativo com 1 operação boa.
 **Objetivo:** nota única 0–100 combinando os 5 indicadores comportamentais.
 
 **Arquivos a alterar:**
-- `apps/trades/views.py` → _calcular_comportamental():
-  - Calcular score de cada indicador normalizado para 0-20 pontos
-  - Revenge: 20 pts se 0%, decrescendo até 0 pts se >= 15%
-  - Overtrading: 20 pts se 0 dias, decrescendo
-  - MEP: 20 pts se aprov_medio >= 80%, proporcional
-  - MEN: 20 pts se razao_media <= 110%, decrescendo
-  - Consistência: 20 pts se pct_dias_positivos >= 70%, proporcional
-  - score_total = soma dos 5 (0-100)
-  - Retornar score_total e breakdown por indicador
-- `templates/trades/comportamental.html` → card de score no topo da página:
-  - Número grande com cor: >= 70 verde, 40-69 amarelo, < 40 vermelho
-  - Barra de progresso visual
-  - Breakdown dos 5 componentes em mini-barras
+- `apps/trades/views.py` → _calcular_comportamental(): score 0-20 por indicador
+- `templates/trades/comportamental.html` → card de score com barra de progresso
 
 ---
 
 ### PASSO 15 — Histograma de Duração das Operações ★★★☆☆
-**Objetivo:** distribuição das durações (winners vs losers) em histograma.
-
 **Arquivos a alterar:**
-- `apps/trades/views.py` → nova função _grafico_histograma_duracao(df):
-  - Calcular duracao_min para cada operação (fechamento - abertura)
-  - Criar histograma Plotly com duas séries sobrepostas:
-    winners (verde) e losers (vermelho)
-  - Eixo X: minutos; Eixo Y: frequência
-- `templates/trades/comportamental.html` → adicionar gráfico na seção
-  de Consistência/Disciplina
+- `apps/trades/views.py` → _grafico_histograma_duracao(df): winners vs losers
+- `templates/trades/comportamental.html` → gráfico na seção de Consistência
 
 ---
 
 ### PASSO 16 — Exportação PDF ★★★☆☆
-**Objetivo:** relatório consolidado com métricas e gráficos para
-registro e compartilhamento.
-
-**Dependências:** pip install weasyprint ou xhtml2pdf
+**Dependências:** pip install weasyprint (produção) ou window.print() (simples)
 **Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view exportar_pdf():
-  - Receber parâmetros de período e tipo (diário/mensal)
-  - Renderizar template HTML específico para PDF
-  - Converter para PDF via WeasyPrint
-  - Retornar HttpResponse com content_type='application/pdf'
+- `apps/trades/views.py` → nova view exportar_pdf()
 - `apps/trades/urls.py` → rota /exportar-pdf/
-- `templates/trades/pdf_relatorio.html` → template otimizado para impressão:
-  - CSS específico para PDF (@media print)
-  - Sem sidebar, sem filtros interativos
-  - Logo, período, todas as métricas, gráficos como imagem estática
-  - Usando Plotly .to_image() (requer kaleido: pip install kaleido)
-- Botão "Exportar PDF" nas páginas Dia e Relatório Mensal
-
-**Detalhes de implementação:**
-- Gráficos: converter figuras Plotly para PNG base64 com fig.to_image()
-  e embutir no HTML antes de passar ao WeasyPrint
-- Alternativa mais simples: usar CSS @media print e botão window.print()
-  sem dependência externa (menor fidelidade mas zero dependência)
-- Recomendado: implementar primeiro com window.print() e depois migrar
-  para WeasyPrint na fase de produção
+- `templates/trades/pdf_relatorio.html` → template otimizado para impressão
 
 ---
 
 ### PASSO 17 — Score do Dia Automático ★★★☆☆
-**Objetivo:** nota calculada automaticamente para cada dia (0-10)
-combinando resultado, disciplina, aproveitamento MEP e gestão de stop.
 **Implementado em conjunto com Passo 6 (AnotacaoDia).**
-
-**Fórmula sugerida:**
-- Componente resultado (40%): normalizar resultado do dia entre -10 e +10
-  usando desvio padrão histórico como referência
-- Componente win rate (20%): win_rate_dia / 100 * 2 (0-2 pontos)
-- Componente MEP (20%): aprov_medio_dia / 100 * 2 (0-2 pontos)
-- Componente MEN (20%): max(0, 2 - (men_razao_dia - 100) / 100) (0-2 pontos)
-- Score final = soma dos componentes, arredondado para 1 casa decimal
+**Fórmula:** resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%) → escala 0-10
 
 ---
 
 ### PASSO 18 — Multi-usuário e Autenticação ★★☆☆☆
-**Objetivo:** login por usuário, dados isolados, base para planos de acesso.
-ParametrosTrader já preparado para esta migração.
-
 **Arquivos a criar/alterar:**
-- `core/settings/base.py` → adicionar django.contrib.auth ao INSTALLED_APPS
-  (já está por padrão); configurar LOGIN_URL, LOGIN_REDIRECT_URL
-- `core/urls.py` → incluir django.contrib.auth.urls
-- `apps/trades/models.py`:
-  - Adicionar campo `usuario = models.ForeignKey(User, on_delete=CASCADE)`
-    em: Operacao, ImportacaoArquivo, SessaoOperacao, JournalOperacao, AnotacaoDia
-  - ParametrosTrader: trocar singleton por OneToOneField(User)
-  - Criar migration correspondente
-- `apps/trades/views.py`:
-  - Decorar todas as views com @login_required
-  - Filtrar todos os querysets por request.user
-  - ParametrosTrader.carregar() → ParametrosTrader.objects.get(usuario=request.user)
-- `templates/` → criar templates de login/logout/registro
-- `templates/base.html` → exibir nome do usuário logado no sidebar footer;
-  link de logout
-
-**Detalhes de implementação:**
-- Migração de dados existentes: script one-shot para associar registros
-  sem usuário ao superuser (dados do desenvolvedor)
-- Planos de acesso: adicionar campo plano ao model User (via UserProfile)
-  com choices: gratuito, profissional, enterprise
-- Controle de acesso por plano: decorator customizado check_plano()
+- `apps/trades/models.py` → FK User em todos os models; ParametrosTrader vira OneToOne
+- `apps/trades/views.py` → @login_required; filtrar por request.user
+- `templates/` → login/logout/registro
+- `templates/base.html` → nome do usuário + logout no sidebar
 
 ---
 
 ### PASSO 19 — Importação Automática / Integração ★★☆☆☆
-**Objetivo:** reduzir fricção do uso diário; importar sem CSV manual.
-
-**Opções a avaliar:**
-- Opção A (mais simples): watcher de pasta — usuário configura uma pasta
-  e o sistema monitora novos CSVs automaticamente via Django management command
-  agendado com cron/Celery
-- Opção B: webhook receptor — Profitchart ou corretora envia dados via API;
-  criar endpoint POST /api/importar/ que recebe e processa
-- Opção C: integração direta com API da corretora (requer análise por corretora)
-
-**Arquivos a criar (Opção A):**
-- `apps/trades/management/commands/importar_pasta.py` → management command
-- `apps/trades/views.py` → nova view api_importar() para Opção B
-- Documentar configuração do cron no README
+**Opção A:** watcher de pasta via management command + cron
+**Opção B:** endpoint POST /api/importar/ para webhook
 
 ---
 
 ### PASSO 20 — Metas e Alertas ★★☆☆☆
-**Objetivo:** meta de resultado mensal com barra de progresso;
-alerta de drawdown máximo configurável.
-
 **Arquivos a alterar:**
-- `apps/trades/models.py` → adicionar ao ParametrosTrader:
-  - meta_resultado_mensal → DecimalField(10,2, default=0)
-  - drawdown_maximo_permitido → DecimalField(10,2, default=0)
-- `apps/trades/admin.py` → adicionar campos ao fieldset
-- `apps/trades/views.py` → dashboard():
-  - Calcular resultado do mês atual
-  - Calcular progresso_meta = resultado_mes / meta * 100 (se meta > 0)
-  - Verificar se drawdown_atual > drawdown_maximo_permitido → alerta_drawdown = True
-- `templates/trades/dashboard.html`:
-  - Barra de progresso da meta mensal abaixo dos cards principais
-  - Banner de alerta (vermelho) se drawdown ultrapassou o limite configurado
+- `apps/trades/models.py` → meta_resultado_mensal, drawdown_maximo_permitido
+- `apps/trades/views.py` → dashboard(): progresso_meta, alerta_drawdown
+- `templates/trades/dashboard.html` → barra de progresso + banner de alerta
 
 ---
 
 ### PASSO 21 — Linha do Tempo Visual do Dia ★★☆☆☆
-**Objetivo:** timeline horizontal com cada operação como bloco colorido.
-Visual diferenciado que facilita leitura do fluxo do dia.
-
 **Arquivos a alterar:**
-- `apps/trades/views.py` → dia(): preparar dados de timeline:
-  - Para cada operação: hora_abertura, hora_fechamento, resultado, ativo
-  - Calcular posição proporcional na janela de 09:00-18:00
-- `templates/trades/dia.html` → adicionar seção de timeline:
-  - SVG ou div CSS com blocos proporcionais ao tempo de duração
-  - Cor: verde (win) ou vermelho (loss)
-  - Tooltip com detalhes ao hover
-  - Posicionada entre os KPIs e a curva de capital
+- `apps/trades/views.py` → dia(): dados de timeline por operação
+- `templates/trades/dia.html` → SVG/CSS com blocos proporcionais ao tempo
 
 ---
 
 ### PASSO 22 — Dark/Light Mode ★★☆☆☆
-**Objetivo:** alternância de tema escuro/claro.
-
 **Arquivos a alterar:**
-- `templates/base.html`:
-  - Adicionar variáveis CSS para tema claro em @media (prefers-color-scheme: light)
-  - Adicionar botão toggle no topbar
-  - Salvar preferência em localStorage
-  - Aplicar classe 'light' no <html> via JavaScript
+- `templates/base.html` → variáveis CSS, botão toggle, localStorage
 
 ---
 
 ### PASSO 23 — App Mobile (PWA) ★☆☆☆☆
-**Objetivo:** tornar a aplicação instalável no celular como Progressive Web App.
-
 **Arquivos a criar/alterar:**
-- `static/manifest.json` → Web App Manifest com nome, ícones, cores
-- `static/sw.js` → Service Worker básico para cache offline
-- `templates/base.html` → adicionar <link rel="manifest"> e registro do SW
-- Criar ícones em múltiplos tamanhos (192x192, 512x512)
+- `static/manifest.json`, `static/sw.js`
+- `templates/base.html` → manifest + service worker
 
 ---
 
 ### ORDEM DE EXECUÇÃO RECOMENDADA
 
-Fase 1 — Fundação analítica (implementar antes de qualquer outra coisa):
-  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → Passo 3 → Passo 7 → Passo 9
+Fase 1 — Fundação analítica:
+  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → Passo 3-B → Passo 7 → Passo 9
 
-Fase 2 — Diferencial competitivo (o que vai vender o produto):
+Fase 2 — Diferencial competitivo:
   ~~Passo 1~~ ✅ → Passo 6 → Passo 10 → Passo 14 → Passo 17
 
-Fase 3 — Visão de negócio (relatórios e comparativos):
+Fase 3 — Visão de negócio:
   Passo 4 → Passo 12 → Passo 16
 
 Fase 4 — Refinamentos comportamentais:
-  Passo 5 → Passo 8 → Passo 11 → Passo 13 → Passo 15
+  ~~Passo 5~~ ✅ → Passo 8 → Passo 11 → Passo 13 → Passo 15
 
 Fase 5 — Infraestrutura para comercialização:
   Passo 18 → Passo 19 → Passo 20

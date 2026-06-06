@@ -54,7 +54,14 @@
       <div class="card-value">
         {% if resultado_total >= 0 %}+{% endif %}R$ {{ resultado_total|floatformat:2 }}
       </div>
-      <div class="card-sub">{{ total_operacoes }} operação{{ total_operacoes|pluralize:",ões" }}</div>
+      <div class="card-sub">
+        {{ total_operacoes }} operação{{ total_operacoes|pluralize:",ões" }}
+        {% if resultado_pontos %}
+          · <span style="font-family:var(--font-mono);letter-spacing:.02em;">
+              {% if resultado_pontos >= 0 %}+{% endif %}{{ resultado_pontos|floatformat:0 }} pts
+            </span>
+        {% endif %}
+      </div>
     </div>
   </div>
 
