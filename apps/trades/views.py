@@ -866,6 +866,7 @@ def operacoes(request):
         for j in JournalOperacao.objects.filter(operacao_id__in=todos_ids)
     }
     for r in registros_conv:
+        r["pk"] = r["id"]
         j = journals_map.get(r["id"])
         r["has_journal"] = j is not None
         r["journal_setup"] = j.setup if j else ""

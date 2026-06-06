@@ -541,7 +541,8 @@
       </button>
       <div class="save-feedback" id="saveFeedback"></div>
     </div>
-
+    
+    {% csrf_token %}
   </div>
 </div>
 
@@ -560,6 +561,9 @@ function getCsrf() {
     const [k, v] = c.trim().split('=');
     if (k === name) return decodeURIComponent(v);
   }
+  // Fallback: buscar no input hidden do Django se existir
+  const input = document.querySelector('[name=csrfmiddlewaretoken]');
+  if (input) return input.value;
   return '';
 }
 
