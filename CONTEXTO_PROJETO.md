@@ -34,6 +34,7 @@ operacional.
 - Resultado em Pontos ← IMPLEMENTADO (Passo 3)
 - Relatório Mensal com comparativo histórico ← IMPLEMENTADO (Passo 4)
 - Anotação do Dia com score automático ← IMPLEMENTADO (Passo 6)
+- Gráfico de Drawdown no Dashboard ← IMPLEMENTADO (Passo 7)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -231,7 +232,8 @@ Observações do trader sobre o pregão como um todo.
   JournalOperacaoAdmin com filtros por emocao e setup;
   AnotacaoDiaAdmin com list_display (data_sessao, estado_emocional, score_dia,
   atualizado_em), list_filter por estado_emocional, ordering por -data_sessao
-- `apps/trades/views.py` → 8 views ativas + helpers de cálculo e gráficos
+- `apps/trades/views.py` → 8 views ativas + helpers de cálculo e gráficos;
+  inclui _grafico_drawdown(df) adicionado no Passo 7
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
   /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/
@@ -243,7 +245,8 @@ Observações do trader sobre o pregão como um todo.
   e Rel. Mensal; .alert-warning e .val-warn no CSS global
 - `templates/trades/dashboard.html` → filter bar; 2 linhas de cards (linha 1:
   Resultado Total com subtítulo pts, Win Rate, Retorno %, Drawdown Máx.;
-  linha 2: Operações, Wins/Losses, EM, Payoff Ratio); 4 gráficos Plotly
+  linha 2: Operações, Wins/Losses, EM, Payoff Ratio); 5 gráficos Plotly
+  (Curva de Capital + Drawdown no mesmo chart-card, Horário, Ativos, Heat Map)
 - `templates/trades/dia.html` → 4 linhas de KPIs; card Anotação do Pregão (Passo 6);
   3 gráficos; tabela com coluna Pts
 - `templates/trades/importar.html` → upload drag-and-drop + exclusão por data/ativo
@@ -307,6 +310,10 @@ Observações do trader sobre o pregão como um todo.
 - Score calculado exibido sempre que há operações no dia, independente de anotação salva;
   cor: verde >= 7, amarelo >= 4, vermelho < 4
 - TZ_BR definida como constante global em views.py; views NÃO definem tz local
+- Gráfico Drawdown: helper _grafico_drawdown(df); série drawdown = acumulado - pico
+  (sempre <= 0); área vermelha fill='tozeroy'; anotação automática no ponto de máximo;
+  altura 160px; eixo X oculto com type='category'; exibido abaixo da Curva de Capital
+  dentro do mesmo chart-card separado por <hr>; renderização condicional no template
 
 
 ## Regras críticas — OBRIGATÓRIO seguir em qualquer alteração de views.py
@@ -327,6 +334,8 @@ Observações do trader sobre o pregão como um todo.
 - Curva de capital: numpy np.where para máscaras; range explícito no yaxis
 - Heat map: zmid=0, cor central #161b22 no colorscale
 - Gráfico overtrading: eixo duplo yaxis2 (overlaying='y', side='right')
+- Gráfico drawdown: fill='tozeroy'; eixo Y sempre negativo (zero = sem drawdown);
+  type='category' no eixo X; altura 160px; anotação no ponto de máximo drawdown
 
 ### Views
 - NUNCA fazer duas chamadas Operacao.objects.all() na mesma view
@@ -352,12 +361,14 @@ Observações do trader sobre o pregão como um todo.
 - Referenciar como params.tempo_minimo_entre_trades, params.max_operacoes_dia,
   params.capital_inicial etc.
 
-### Drawdown (adicionado no Passo 2)
+### Drawdown (adicionado no Passo 2, gráfico no Passo 7)
 - Helper _drawdown_maximo(df): ordena por abertura, cumsum, cummax, retorna max(pico - atual)
+- Helper _grafico_drawdown(df): série drawdown = acumulado - pico; retorna HTML Plotly
 - Reutilizar _drawdown_maximo() em qualquer view que precisar de drawdown acumulado
 - NUNCA recalcular drawdown inline nas views para o dashboard; sempre usar o helper
 - Exceção: relatorio_mensal() calcula drawdown inline por mês (escopo mensal isolado,
   não usa o helper pois o acumulado é reiniciado a cada mês)
+- dashboard(): grafico_drawdown = '' no bloco if df.empty; _grafico_drawdown(df) no else
 
 ### Resultado em Pontos (adicionado no Passo 3)
 - Campo no model: resultado_operacao_pontos (DecimalField 10,2)
@@ -409,9 +420,11 @@ Observações do trader sobre o pregão como um todo.
 
 ### Dashboard
 1. Curva de Capital → três traces numpy; área positiva/negativa; linha dinâmica
-2. Resultado por Horário → barras verticais coloridas individualmente
-3. Resultado por Ativo → barras horizontais agrupadas por instrumento
-4. Heat Map Dia × Horário → colorscale divergente, zmid=0, cor central #161b22
+2. Drawdown → _grafico_drawdown(df); área vermelha fill='tozeroy'; altura 160px;
+   exibido abaixo da Curva de Capital no mesmo chart-card separado por <hr> (Passo 7)
+3. Resultado por Horário → barras verticais coloridas individualmente
+4. Resultado por Ativo → barras horizontais agrupadas por instrumento
+5. Heat Map Dia × Horário → colorscale divergente, zmid=0, cor central #161b22
 
 ### Página Dia
 1. Curva de Capital intraday → mesma lógica dashboard; HH:MM; markers nos pontos
@@ -430,6 +443,7 @@ Observações do trader sobre o pregão como um todo.
 - Expectativa Matemática → _calcular_metricas_avancadas(df); Dashboard
 - Payoff Ratio → mesma função; Dashboard e Dia
 - Drawdown Máximo → _drawdown_maximo(df); Dashboard (Passo 2)
+- Gráfico Drawdown → _grafico_drawdown(df); Dashboard (Passo 7)
 - Retorno % sobre Capital → dashboard(); requer capital_inicial > 0 (Passo 2)
 - Resultado em Pontos → resultado_operacao_pontos; Dashboard (subtítulo), Dia e Operações (Passo 3)
 - Relatório Mensal → agrupamento por Period('M'); delta mês a mês; retorno % sobre capital (Passo 4)
@@ -567,23 +581,18 @@ o que fazer, quais arquivos alterar e os detalhes de implementação.
 
 ---
 
-### PASSO 7 — Gráfico de Drawdown ★★★★☆
-**Objetivo:** adicionar curva de drawdown abaixo da curva de capital
-no Dashboard. Visual padrão em todas plataformas profissionais.
-
-**Arquivos a alterar:**
-- `apps/trades/views.py` → adicionar função _grafico_drawdown(df):
-  - Calcular série de drawdown ponto a ponto (valor atual - pico histórico)
-  - Retornar figura Plotly com área vermelha fill='tozeroy'
-  - Altura: 160px (gráfico secundário, menor que o de capital)
-- `templates/trades/dashboard.html` → exibir _grafico_drawdown abaixo da
-  Curva de Capital, dentro do mesmo chart-card, separado por linha divisória
-
-**Detalhes de implementação:**
-- Eixo Y do drawdown sempre negativo (zero = sem drawdown)
-- Exibir valor de drawdown máximo do período como anotação no gráfico
-- Usar tickprefix="R$ " e tickformat=",.0f" consistente com os demais
-- Reutilizar lógica do helper _drawdown_maximo(); não duplicar cálculo
+### PASSO 7 — Gráfico de Drawdown ★★★★☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- Helper `_grafico_drawdown(df)`: calcula série drawdown = acumulado - pico (sempre <= 0);
+  área vermelha semitransparente fill='tozeroy'; anotação automática no ponto de máximo
+  drawdown com valor em R$; altura 160px; eixo X oculto com type='category';
+  eixo Y com tickprefix="R$ "; include_plotlyjs=False
+- `dashboard()`: grafico_drawdown = '' no bloco if df.empty;
+  grafico_drawdown = _grafico_drawdown(df) no bloco else;
+  'grafico_drawdown' adicionado ao context
+- `dashboard.html`: gráfico de drawdown exibido abaixo da Curva de Capital
+  dentro do mesmo chart-card, separado por <hr>; label "Drawdown" em vermelho;
+  renderização condicional com {% if grafico_drawdown %}
 
 ---
 
@@ -731,7 +740,7 @@ Falta apenas o card Win Rate da página Dia.
 ### ORDEM DE EXECUÇÃO RECOMENDADA
 
 Fase 1 — Fundação analítica:
-  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → Passo 7 → Passo 9
+  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → ~~Passo 7~~ ✅ → Passo 9
 
 Fase 2 — Diferencial competitivo:
   ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → Passo 10 → Passo 14 → ~~Passo 17~~ ✅

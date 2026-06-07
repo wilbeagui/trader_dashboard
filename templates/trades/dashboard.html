@@ -198,7 +198,7 @@
 <!-- ── Gráficos — linha 1 ── -->
 <div class="row g-3 mb-3">
 
-  <!-- Curva de Capital -->
+<!-- Curva de Capital + Drawdown -->
   <div class="col-12 col-xl-8">
     <div class="chart-card">
       <div class="chart-title">
@@ -211,6 +211,16 @@
           <i class="bi bi-bar-chart" style="font-size:32px;"></i>
           <p style="margin-top:10px;font-size:13px;">Sem dados para o período</p>
         </div>
+      {% endif %}
+
+      {% if grafico_drawdown %}
+        <hr style="border-color:#21262d; margin: 4px 0;">
+        <div class="d-flex align-items-center gap-2 px-1 pt-1 pb-0">
+          <span style="font-size:11px; color:#e05c5c; font-family:monospace;">
+            <i class="bi bi-arrow-down-circle me-1"></i>Drawdown
+          </span>
+        </div>
+        {{ grafico_drawdown|safe }}
       {% endif %}
     </div>
   </div>

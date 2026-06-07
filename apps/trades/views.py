@@ -123,6 +123,77 @@ def _drawdown_maximo(df: pd.DataFrame) -> float:
     return float(drawdown.max())
 
 
+def _grafico_drawdown(df: pd.DataFrame) -> str:
+    """
+    Gera gráfico de drawdown ponto a ponto abaixo da curva de capital.
+    Retorna HTML do Plotly ou string vazia se df vazio.
+    """
+    if df.empty:
+        return ''
+
+    df_ord = df.sort_values('abertura').copy()
+    df_ord['abertura_str'] = df_ord['abertura'].dt.strftime('%d/%m %H:%M')
+    acumulado = df_ord['resultado_operacao'].astype(float).cumsum()
+    pico = acumulado.cummax()
+    drawdown = acumulado - pico  # sempre <= 0
+
+    drawdown_max_val = float(drawdown.min())  # valor mais negativo
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=df_ord['abertura_str'].tolist(),
+        y=drawdown.tolist(),
+        mode='lines',
+        fill='tozeroy',
+        fillcolor='rgba(224, 92, 92, 0.25)',
+        line=dict(color='#e05c5c', width=1.5),
+        hovertemplate='%{x}<br>Drawdown: R$ %{y:,.2f}<extra></extra>',
+    ))
+
+    # Anotação com o valor máximo de drawdown
+    if drawdown_max_val < 0:
+        idx_min = drawdown.idxmin()
+        fig.add_annotation(
+            x=df_ord.loc[idx_min, 'abertura_str'],
+            y=drawdown_max_val,
+            text=f'Máx: R$ {drawdown_max_val:,.2f}',
+            showarrow=True,
+            arrowhead=2,
+            arrowcolor='#e05c5c',
+            font=dict(color='#e05c5c', size=11),
+            bgcolor='#161b22',
+            bordercolor='#e05c5c',
+            borderwidth=1,
+            ay=-30,
+        )
+
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#b8c4ce', family='monospace', size=11),
+        margin=dict(l=10, r=10, t=8, b=8),
+        height=160,
+        xaxis=dict(
+            type='category',
+            showgrid=False,
+            showticklabels=False,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor='#21262d',
+            tickprefix='R$ ',
+            tickformat=',.0f',
+            zeroline=True,
+            zerolinecolor='#444c56',
+            zerolinewidth=1,
+        ),
+        showlegend=False,
+    )
+
+    return fig.to_html(full_html=False, include_plotlyjs=False)
+
 # ──────────────────────────────────────────────
 # Helpers de cálculo — dia()
 # ──────────────────────────────────────────────
@@ -789,6 +860,7 @@ def dashboard(request):
         total_sessoes = 0
         drawdown_max = 0.0
         resultado_pontos = 0.0
+        grafico_drawdown = ''
     else:
         resultado_total = float(df["resultado_operacao"].sum())
         total_operacoes = len(df)
@@ -802,6 +874,7 @@ def dashboard(request):
         total_sessoes = df["sessao__data_sessao"].nunique()
         drawdown_max = _drawdown_maximo(df)
         resultado_pontos = float(df["resultado_operacao_pontos"].sum())
+        grafico_drawdown = _grafico_drawdown(df)
 
     # Retorno % e Drawdown % sobre capital
     if capital_inicial > 0:
@@ -836,10 +909,12 @@ def dashboard(request):
         "gain_medio":             metricas_av["gain_medio"],
         "loss_medio":             metricas_av["loss_medio"],
         # Gráficos
-        "grafico_capital": _grafico_capital(df),
-        "grafico_horario": _grafico_horario(df),
-        "grafico_ativos":  _grafico_ativos(df),
-        "grafico_heatmap": _grafico_heatmap(df),
+        "grafico_capital":  _grafico_capital(df),
+        "grafico_horario":  _grafico_horario(df),
+        "grafico_ativos":   _grafico_ativos(df),
+        "grafico_heatmap":  _grafico_heatmap(df),
+        # Passo 7
+        "grafico_drawdown": grafico_drawdown,
     }
     return render(request, "trades/dashboard.html", context)
 
