@@ -2,7 +2,10 @@ from django.contrib import admin
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
-from .models import ImportacaoArquivo, SessaoOperacao, Operacao, ParametrosTrader, JournalOperacao
+from .models import (ImportacaoArquivo, SessaoOperacao, 
+                    Operacao, ParametrosTrader, JournalOperacao,
+                    AnotacaoDia,
+                    )
 
 
 @admin.register(ImportacaoArquivo)
@@ -57,3 +60,12 @@ class JournalOperacaoAdmin(admin.ModelAdmin):
     list_filter = ['emocao', 'setup']
     search_fields = ['setup', 'tags', 'anotacao']
     readonly_fields = ['criado_em', 'atualizado_em']
+
+
+@admin.register(AnotacaoDia)
+class AnotacaoDiaAdmin(admin.ModelAdmin):
+    list_display = ('data_sessao', 'estado_emocional',
+                    'score_dia', 'atualizado_em')
+    list_filter = ('estado_emocional',)
+    ordering = ('-data_sessao',)
+    readonly_fields = ('criado_em', 'atualizado_em')

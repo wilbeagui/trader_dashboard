@@ -281,6 +281,96 @@
 
 </div>
 
+{# ── Anotação do Dia ──────────────────────────────────────────────────────── #}
+<div class="chart-card mb-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="chart-title mb-0">
+      <i class="bi bi-journal-text me-2 text-info"></i>Anotação do Pregão
+    </div>
+    {% if score_dia_calculado is not None %}
+    <div class="d-flex align-items-center gap-3">
+      <span class="text-muted small">Score calculado:</span>
+      <span class="fw-bold fs-5
+        {% if score_dia_calculado >= 7 %}val-pos
+        {% elif score_dia_calculado >= 4 %}text-warning
+        {% else %}val-neg{% endif %}">
+        {{ score_dia_calculado }}<span class="text-muted fs-6">/10</span>
+      </span>
+    </div>
+    {% endif %}
+  </div>
+
+  <form method="post" action="{% url 'trades:dia' %}">
+    {% csrf_token %}
+    <input type="hidden" name="data_sessao" value="{{ data_sel }}">
+
+    <div class="row g-3">
+
+      {# Contexto de Mercado #}
+      <div class="col-12 col-md-6">
+        <label class="form-label text-muted small mb-1">
+          <i class="bi bi-graph-up me-1"></i>Contexto de Mercado
+        </label>
+        <textarea name="contexto_mercado" rows="3"
+                  class="form-control form-control-sm bg-dark text-light border-secondary"
+                  placeholder="O que estava acontecendo no mercado hoje...">{{ anotacao_dia.contexto_mercado|default:'' }}</textarea>
+      </div>
+
+      {# Observação Geral #}
+      <div class="col-12 col-md-6">
+        <label class="form-label text-muted small mb-1">
+          <i class="bi bi-chat-left-text me-1"></i>Observação Geral
+        </label>
+        <textarea name="observacao" rows="3"
+                  class="form-control form-control-sm bg-dark text-light border-secondary"
+                  placeholder="Anotações livres sobre o pregão...">{{ anotacao_dia.observacao|default:'' }}</textarea>
+      </div>
+
+      {# Estado Emocional #}
+      <div class="col-6 col-md-3">
+        <label class="form-label text-muted small mb-1">
+          <i class="bi bi-emoji-smile me-1"></i>Estado Emocional
+        </label>
+        <select name="estado_emocional"
+                class="form-select form-select-sm bg-dark text-light border-secondary">
+          <option value="">— selecione —</option>
+          {% for val, label in emocao_choices %}
+            <option value="{{ val }}"
+              {% if anotacao_dia.estado_emocional == val %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {# Score Manual #}
+      <div class="col-6 col-md-3">
+        <label class="form-label text-muted small mb-1">
+          <i class="bi bi-star me-1"></i>Score Manual
+          <span class="text-muted">(1–10)</span>
+        </label>
+        <input type="number" name="score_dia" min="1" max="10"
+               class="form-control form-control-sm bg-dark text-light border-secondary"
+               placeholder="1 a 10"
+               value="{{ anotacao_dia.score_dia|default:'' }}">
+      </div>
+
+      {# Botão salvar + feedback de última atualização #}
+      <div class="col-12 col-md-6 d-flex align-items-end gap-3">
+        <button type="submit" class="btn btn-sm btn-outline-info px-4">
+          <i class="bi bi-floppy me-1"></i>Salvar
+        </button>
+        {% if anotacao_dia.atualizado_em %}
+        <span class="text-muted small">
+          Atualizado em {{ anotacao_dia.atualizado_em|date:"d/m/Y H:i" }}
+        </span>
+        {% endif %}
+      </div>
+
+    </div>
+  </form>
+</div>
+
 <!-- ══ Curva de Capital ══ -->
 <div class="chart-card mb-3">
   <div class="chart-title">

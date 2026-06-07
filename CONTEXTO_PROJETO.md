@@ -33,6 +33,7 @@ operacional.
 - Retorno % sobre Capital + Drawdown no Dashboard ← IMPLEMENTADO (Passo 2)
 - Resultado em Pontos ← IMPLEMENTADO (Passo 3)
 - Relatório Mensal com comparativo histórico ← IMPLEMENTADO (Passo 4)
+- Anotação do Dia com score automático ← IMPLEMENTADO (Passo 6)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -192,16 +193,18 @@ Anotações qualitativas vinculadas a uma Operacao.
 - `atualizado_em`     → DateTimeField(auto_now=True)
 - tags_lista() → método que retorna lista de tags limpas
 
-### AnotacaoDia ← A CRIAR (Passo 6)
+### AnotacaoDia ← IMPLEMENTADO (Passo 6)
 Observações do trader sobre o pregão como um todo.
 - `data_sessao` → DateField(unique=True)
 - `contexto_mercado` → TextField(blank) — o que estava acontecendo no mercado
 - `estado_emocional`  → CharField(20, choices, blank)
   choices: calmo, ansioso, confiante, frustrado, neutro
-- `score_dia`         → IntegerField(null, blank) — nota 1 a 10 (manual ou calculado)
+- `score_dia`         → IntegerField(null, blank) — nota 1 a 10 (manual)
 - `observacao`        → TextField(blank) — texto livre
 - `criado_em`         → DateTimeField(auto_now_add=True)
 - `atualizado_em`     → DateTimeField(auto_now=True)
+- ordering = ['-data_sessao']
+- verbose_name = 'Anotação do Dia'
 
 ## Arquivos criados e o que fazem
 
@@ -212,18 +215,22 @@ Observações do trader sobre o pregão como um todo.
 - `core/wsgi.py` → aponta para core.settings.development
 - `core/asgi.py` → aponta para core.settings.development
 - `manage.py` → aponta para core.settings.development
-- `apps/trades/models.py` → 5 models ativos (Operacao atualizado no Passo 3;
-  JournalOperacao implementado; ParametrosTrader atualizado) + 1 a criar (AnotacaoDia)
+- `apps/trades/models.py` → 6 models ativos (Operacao atualizado no Passo 3;
+  JournalOperacao implementado; ParametrosTrader atualizado;
+  AnotacaoDia implementado no Passo 6)
 - `apps/trades/migrations/0001_initial.py` → migração inicial
 - `apps/trades/migrations/0002_parametrostrader.py` → migração ParametrosTrader
 - `apps/trades/migrations/0003_journaloperacao.py` → migração JournalOperacao (Passo 1)
 - `apps/trades/migrations/0004_parametrostrader_capital_inicial.py` → migração capital_inicial (Passo 2)
 - `apps/trades/migrations/0005_operacao_passo3.py` → migração Passo 3: remove campos
   obsoletos, renomeia resultado_intervalo_pontos → resultado_operacao_pontos
-- `apps/trades/admin.py` → registra os 5 models; ParametrosTraderAdmin com fieldsets
+- `apps/trades/migrations/0006_anotacaodia.py` → migração Passo 6: cria model AnotacaoDia
+- `apps/trades/admin.py` → registra os 6 models; ParametrosTraderAdmin com fieldsets
   "Limites Operacionais" e "Capital"; redireciona listagem direto para edição,
   impede criação de segundo registro e impede exclusão;
-  JournalOperacaoAdmin com filtros por emocao e setup
+  JournalOperacaoAdmin com filtros por emocao e setup;
+  AnotacaoDiaAdmin com list_display (data_sessao, estado_emocional, score_dia,
+  atualizado_em), list_filter por estado_emocional, ordering por -data_sessao
 - `apps/trades/views.py` → 8 views ativas + helpers de cálculo e gráficos
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
@@ -237,7 +244,8 @@ Observações do trader sobre o pregão como um todo.
 - `templates/trades/dashboard.html` → filter bar; 2 linhas de cards (linha 1:
   Resultado Total com subtítulo pts, Win Rate, Retorno %, Drawdown Máx.;
   linha 2: Operações, Wins/Losses, EM, Payoff Ratio); 4 gráficos Plotly
-- `templates/trades/dia.html` → 4 linhas de KPIs; 3 gráficos; tabela com coluna Pts
+- `templates/trades/dia.html` → 4 linhas de KPIs; card Anotação do Pregão (Passo 6);
+  3 gráficos; tabela com coluna Pts
 - `templates/trades/importar.html` → upload drag-and-drop + exclusão por data/ativo
 - `templates/trades/operacoes.html` → listagem com filtros, paginação, 4 cards;
   coluna Pts na tabela; coluna Journal com botão por linha; offcanvas drawer Bootstrap
@@ -290,6 +298,15 @@ Observações do trader sobre o pregão como um todo.
   para resultado, win rate, total de ops e EM; drawdown calculado inline por mês
   (escopo mensal, não acumulado histórico); django.contrib.humanize adicionado ao
   INSTALLED_APPS para uso futuro de filtros como intcomma
+- AnotacaoDia: score manual (1–10) coexiste com score calculado automaticamente;
+  score calculado = resultado 40% + win rate 20% + MEP 20% + MEN 20%, escala 0–10;
+  dias sem losers recebem nota 5 no componente MEN (neutro, evita inflação do score);
+  régua do resultado: R$ -500 = nota 0, R$ 0 = nota 5, R$ +500 = nota 10
+- AnotacaoDia salva via POST para a própria URL /dia/?data=...; get_or_create garante
+  idempotência; redirect de volta ao mesmo dia após salvar
+- Score calculado exibido sempre que há operações no dia, independente de anotação salva;
+  cor: verde >= 7, amarelo >= 4, vermelho < 4
+- TZ_BR definida como constante global em views.py; views NÃO definem tz local
 
 
 ## Regras críticas — OBRIGATÓRIO seguir em qualquer alteração de views.py
@@ -297,7 +314,9 @@ Observações do trader sobre o pregão como um todo.
 ### Timezone
 - Datas no banco estão em UTC
 - Sempre converter para America/Sao_Paulo antes de usar:
-  df['abertura'] = pd.to_datetime(df['abertura'], utc=True).dt.tz_convert('America/Sao_Paulo')
+  df['abertura'] = pd.to_datetime(df['abertura'], utc=True).dt.tz_convert(TZ_BR)
+- TZ_BR = pytz.timezone("America/Sao_Paulo") definida como constante global no topo
+  de views.py; NUNCA redefinir como variável local dentro de uma view
 - Para filtros de data no queryset usar abertura__date__gte/lte
 - Para gráficos Plotly converter datas para string após tz_convert e usar type='category'
 
@@ -363,6 +382,15 @@ Observações do trader sobre o pregão como um todo.
 - URL de salvar: /journal/salvar/<op_id>/ (sem prefixo extra — namespace trades está na raiz /)
 - r["pk"] = r["id"] obrigatório no loop de operacoes() para expor pk ao template
 
+### AnotacaoDia (adicionado no Passo 6)
+- Buscar via AnotacaoDia.objects.filter(data_sessao=data_sel).first() na view dia()
+- Score calculado sempre presente quando df não está vazio; independe de registro salvo
+- emocao_choices: passar AnotacaoDia.EMOCAO_CHOICES ao context para popular o select
+- POST tratado no início de dia(), antes do processamento GET; redirect após salvar
+- NUNCA usar score_dia do banco como score calculado — são grandezas distintas
+- Score calculado: resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%);
+  régua resultado ±R$500; dias sem losers = nota 5 no componente MEN
+
 ### Bootstrap Icons
 - Versão em uso: 1.11.3
 - Verificar existência antes de usar; bi-brain NÃO existe → usar bi-person-check
@@ -405,6 +433,7 @@ Observações do trader sobre o pregão como um todo.
 - Retorno % sobre Capital → dashboard(); requer capital_inicial > 0 (Passo 2)
 - Resultado em Pontos → resultado_operacao_pontos; Dashboard (subtítulo), Dia e Operações (Passo 3)
 - Relatório Mensal → agrupamento por Period('M'); delta mês a mês; retorno % sobre capital (Passo 4)
+- Score do Dia Calculado → dia(); resultado 40% + WR 20% + MEP 20% + MEN 20%; escala 0–10 (Passo 6)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades
@@ -512,29 +541,29 @@ o que fazer, quais arquivos alterar e os detalhes de implementação.
 
 ---
 
-### PASSO 6 — Anotação do Dia (AnotacaoDia) ★★★★☆
-**Objetivo:** campo de observação do pregão como um todo —
-contexto de mercado, estado emocional, score do dia 1-10.
+### PASSO 6 — Anotação do Dia (AnotacaoDia) ★★★★☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- Model `AnotacaoDia`: data_sessao (unique), contexto_mercado, estado_emocional,
+  score_dia (manual, 1–10), observacao, criado_em, atualizado_em;
+  ordering = ['-data_sessao']; verbose_name = 'Anotação do Dia'
+- Migração `0006_anotacaodia.py`
+- `AnotacaoDiaAdmin`: list_display (data_sessao, estado_emocional, score_dia,
+  atualizado_em), list_filter por estado_emocional, ordering por -data_sessao,
+  readonly_fields para timestamps
+- `dia()` atualizada:
+  - Bloco POST no início: get_or_create + save + redirect para o mesmo dia
+  - Score calculado: resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%)
+    normalizado para 0–10; dias sem losers = 5 no MEN; régua resultado ±R$500
+  - Context: anotacao_dia, score_dia_calculado, emocao_choices
+- `dia.html`: card "Anotação do Pregão" após os KPIs com campos contexto_mercado,
+  observacao, estado_emocional (select), score_dia (input 1–10), botão Salvar;
+  score calculado exibido no header do card com cor dinâmica (verde/amarelo/vermelho)
 
-**Arquivos a criar/alterar:**
-- `apps/trades/models.py` → adicionar model AnotacaoDia (ver seção Models)
-- `apps/trades/migrations/` → nova migração
-- `apps/trades/admin.py` → registrar AnotacaoDia
-- `apps/trades/views.py` → dia():
-  - Buscar AnotacaoDia.objects.filter(data_sessao=data_sel).first()
-  - Calcular score_dia automático baseado em: resultado (40%), win rate (20%),
-    aproveitamento MEP (20%), gestão stop MEN (20%) — escala 0-10
-  - Passar anotacao_dia e score_dia_calculado ao context
-  - Adicionar tratamento POST para salvar/atualizar AnotacaoDia
-- `templates/trades/dia.html` → adicionar seção após os KPIs:
-  - Card com formulário inline (contexto de mercado, emoção, score manual, observação)
-  - Score calculado automaticamente exibido ao lado do score manual
-  - Botão salvar que faz POST sem sair da página (form normal com redirect de volta)
-
-**Detalhes de implementação:**
-- Score do dia calculado: normalizar cada componente para 0-10 e ponderar
-- Se score manual preenchido, exibir ambos (calculado e manual)
-- Anotação do dia integrada ao Relatório Mensal (Passo 4)
+**Detalhes técnicos:**
+- Score calculado sempre aparece quando há operações, independente de anotação salva
+- Score manual e calculado são grandezas distintas e coexistem no card
+- tz = pytz.timezone(...) removida da view dia() — usa constante global TZ_BR
+- Passo 17 (Score do Dia Automático) antecipado e implementado junto com este passo
 
 ---
 
@@ -651,9 +680,8 @@ Falta apenas o card Win Rate da página Dia.
 
 ---
 
-### PASSO 17 — Score do Dia Automático ★★★☆☆
-**Implementado em conjunto com Passo 6 (AnotacaoDia).**
-**Fórmula:** resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%) → escala 0-10
+### PASSO 17 — Score do Dia Automático ★★★☆☆ ✅ CONCLUÍDO (antecipado no Passo 6)
+**Fórmula implementada:** resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%) → escala 0–10
 
 ---
 
@@ -706,7 +734,7 @@ Fase 1 — Fundação analítica:
   ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → Passo 7 → Passo 9
 
 Fase 2 — Diferencial competitivo:
-  ~~Passo 1~~ ✅ → Passo 6 → Passo 10 → Passo 14 → Passo 17
+  ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → Passo 10 → Passo 14 → ~~Passo 17~~ ✅
 
 Fase 3 — Visão de negócio:
   ~~Passo 4~~ ✅ → Passo 12 → Passo 16

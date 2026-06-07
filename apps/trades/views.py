@@ -14,7 +14,11 @@ from django.utils import timezone
 from django.db.models import QuerySet
 from django.shortcuts import render, redirect, get_object_or_404
 
-from .models import ImportacaoArquivo, Operacao, ParametrosTrader, SessaoOperacao, JournalOperacao
+from .models import (ImportacaoArquivo, Operacao, 
+                     ParametrosTrader, SessaoOperacao, 
+                     JournalOperacao, AnotacaoDia,
+)
+
 from .services import importar_csv  # noqa: F401
 
 # ──────────────────────────────────────────────
@@ -1045,11 +1049,29 @@ def importar(request):
 
 
 def dia(request):
+
     dias_disponiveis = Operacao.objects.dates("abertura", "day", order="DESC")
     dias_str = [d.strftime("%Y-%m-%d") for d in dias_disponiveis]
 
     if not dias_str:
         return render(request, "trades/dia.html", {"sem_dados": True})
+
+    # --- Salvar Anotação do Dia via POST ---
+    if request.method == 'POST':
+        data_post = request.POST.get('data_sessao', '').strip()
+        if data_post:
+            anotacao, _ = AnotacaoDia.objects.get_or_create(
+                data_sessao=data_post)
+            anotacao.contexto_mercado = request.POST.get(
+                'contexto_mercado', '').strip()
+            anotacao.estado_emocional = request.POST.get(
+                'estado_emocional', '').strip()
+            score_raw = request.POST.get('score_dia', '').strip()
+            anotacao.score_dia = int(score_raw) if score_raw.isdigit(
+            ) and 1 <= int(score_raw) <= 10 else None
+            anotacao.observacao = request.POST.get('observacao', '').strip()
+            anotacao.save()
+        return redirect(f"{request.path}?data={data_post}")
 
     data_sel = request.GET.get("data", dias_str[0]).strip()
     if data_sel not in dias_str:
@@ -1081,7 +1103,8 @@ def dia(request):
     df["total_acumulado"] = df["resultado_operacao"].cumsum()
     df["mep"] = df["mep"].astype(float)
     df["men"] = df["men"].astype(float)
-    df["resultado_operacao_pontos"] = df["resultado_operacao_pontos"].astype(float)
+    df["resultado_operacao_pontos"] = df["resultado_operacao_pontos"].astype(
+        float)
 
     total_ops = len(df)
     resultado = float(df["resultado_operacao"].sum())
@@ -1130,33 +1153,71 @@ def dia(request):
     tabela = []
     for _, row in df.iterrows():
         tabela.append({
-            "ativo":              row["ativo"],
-            "lado":               row["lado"],
-            "abertura_local":     row["abertura"],
-            "qtd_compra":         row["qtd_compra"],
-            "preco_compra":       row["preco_compra"],
-            "preco_venda":        row["preco_venda"],
-            "mep":                row["mep"],
-            "men":                row["men"],
-            "resultado_operacao": row["resultado_operacao"],
-            "resultado_operacao_pontos":   row["resultado_operacao_pontos"],
-            "tempo_operacao":     row["tempo_operacao"],
-            "total_acumulado":    row["total_acumulado"],
+            "ativo":                     row["ativo"],
+            "lado":                      row["lado"],
+            "abertura_local":            row["abertura"],
+            "qtd_compra":                row["qtd_compra"],
+            "preco_compra":              row["preco_compra"],
+            "preco_venda":               row["preco_venda"],
+            "mep":                       row["mep"],
+            "men":                       row["men"],
+            "resultado_operacao":        row["resultado_operacao"],
+            "resultado_operacao_pontos": row["resultado_operacao_pontos"],
+            "tempo_operacao":            row["tempo_operacao"],
+            "total_acumulado":           row["total_acumulado"],
         })
+
+    # --- Anotação do Dia ---
+    anotacao_dia = AnotacaoDia.objects.filter(data_sessao=data_sel).first()
+
+    # Score calculado automaticamente (escala 0–10)
+    # Ponderação: resultado 40%, win rate 20%, aproveitamento MEP 20%, gestão MEN 20%
+    resultado_norm = min(max((resultado + 500) / 1000 * 10, 0), 10)
+    wr_norm = win_rate / 10
+
+    df_wins = df[wins_mask].copy()
+    if not df_wins.empty:
+        mep_vals = df_wins["mep"].replace(0, float('nan'))
+        res_vals = df_wins["resultado_operacao"]
+        aproveit = float((res_vals / mep_vals).mean() *
+                         100) if mep_vals.notna().any() else 0
+        aproveit = min(max(aproveit, 0), 100)
+    else:
+        aproveit = 0
+    mep_norm = aproveit / 10
+
+    df_loss = df[losses_mask].copy()
+    if not df_loss.empty:
+        men_vals = df_loss["men"].abs().replace(0, float('nan'))
+        res_loss = df_loss["resultado_operacao"].abs()
+        gestao = float((men_vals / res_loss).mean() *
+                       100) if men_vals.notna().any() else 0
+        gestao = min(max(gestao, 0), 100)
+    else:
+        gestao = 50  # sem losers = dia perfeito; neutro para não inflar o score
+    men_norm = gestao / 10
+
+    score_dia_calculado = round(
+        resultado_norm * 0.4 +
+        wr_norm * 0.2 +
+        mep_norm * 0.2 +
+        men_norm * 0.2,
+        1
+    )
 
     context = {
         "sem_dados": False, "sem_ops": False,
         "dias_disponiveis": dias_str, "data_sel": data_sel,
-        "resultado_total": round(resultado, 2),
-        "win_rate":        round(win_rate, 1),
-        "total_ops":       total_ops,
-        "fator_lucro":     round(fator_lucro, 2) if fator_lucro else None,
-        "drawdown_max":    round(drawdown_max, 2),
-        "exposicao_neg":   round(exposicao_neg, 2),
-        "maior_gain":      round(maior_gain, 2),
+        "resultado_total":  round(resultado, 2),
+        "win_rate":         round(win_rate, 1),
+        "total_ops":        total_ops,
+        "fator_lucro":      round(fator_lucro, 2) if fator_lucro else None,
+        "drawdown_max":     round(drawdown_max, 2),
+        "exposicao_neg":    round(exposicao_neg, 2),
+        "maior_gain":       round(maior_gain, 2),
         "maior_gain_ativo": maior_gain_ativo,
         "maior_gain_hora":  maior_gain_hora,
-        "maior_loss":      round(maior_loss, 2),
+        "maior_loss":       round(maior_loss, 2),
         "maior_loss_ativo": maior_loss_ativo,
         "maior_loss_hora":  maior_loss_hora,
         "tempo_medio_win":  tempo_medio_win,
@@ -1164,16 +1225,19 @@ def dia(request):
         "razao_tempo":      razao,
         "total_wins":       total_wins,
         "total_losses":     total_losses,
-        "payoff_ratio_dia":  metricas_av_dia["payoff_ratio"],
-        "gain_medio_dia":    metricas_av_dia["gain_medio"],
-        "loss_medio_dia":    metricas_av_dia["loss_medio"],
+        "payoff_ratio_dia": metricas_av_dia["payoff_ratio"],
+        "gain_medio_dia":   metricas_av_dia["gain_medio"],
+        "loss_medio_dia":   metricas_av_dia["loss_medio"],
         "grafico_capital":  _grafico_capital_dia(df),
         "grafico_horario":  _grafico_horario_dia(df),
         "grafico_execucao": _grafico_execucao(df),
         "operacoes":        tabela,
+        # Passo 6 — Anotação do Dia
+        "anotacao_dia":        anotacao_dia,
+        "score_dia_calculado": score_dia_calculado,
+        "emocao_choices":      AnotacaoDia.EMOCAO_CHOICES,
     }
     return render(request, "trades/dia.html", context)
-
 
 def comportamental(request):
     """

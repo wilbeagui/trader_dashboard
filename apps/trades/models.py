@@ -234,3 +234,30 @@ class JournalOperacao(models.Model):
         if not self.tags:
             return []
         return [t.strip() for t in self.tags.split(',') if t.strip()]
+
+
+class AnotacaoDia(models.Model):
+    EMOCAO_CHOICES = [
+        ('calmo',      'Calmo'),
+        ('ansioso',    'Ansioso'),
+        ('confiante',  'Confiante'),
+        ('frustrado',  'Frustrado'),
+        ('neutro',     'Neutro'),
+    ]
+
+    data_sessao = models.DateField(unique=True)
+    contexto_mercado = models.TextField(blank=True)
+    estado_emocional = models.CharField(
+        max_length=20, choices=EMOCAO_CHOICES, blank=True)
+    score_dia = models.IntegerField(null=True, blank=True)  # manual, 1–10
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Anotação do Dia'
+        verbose_name_plural = 'Anotações do Dia'
+        ordering = ['-data_sessao']
+
+    def __str__(self):
+        return f'Anotação {self.data_sessao}'
