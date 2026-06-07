@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Relatório Mensal{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <h4 class="mb-0 fw-semibold">
+    <i class="bi bi-calendar3 me-2 text-info"></i>Relatório Mensal
+  </h4>
+  <p class="text-muted small mt-1 mb-0">Visão consolidada por mês · comparativo histórico</p>
+</div>
+
+{% if sem_dados %}
+<div class="alert alert-secondary">Nenhuma operação importada ainda.</div>
+{% else %}
+
+{# ── Filtro de mês ─────────────────────────────────────────────────────────── #}
+<form method="get" class="mb-4">
+  <div class="d-flex align-items-center gap-3">
+    <label class="text-muted small mb-0">Mês:</label>
+    <select name="mes" class="form-select form-select-sm w-auto bg-dark text-light border-secondary"
+            onchange="this.form.submit()">
+      {% for m in meses_disponiveis %}
+        <option value="{{ m.valor }}" {% if m.valor == mes_sel %}selected{% endif %}>
+          {{ m.label }}
+        </option>
+      {% endfor %}
+    </select>
+    {% if mes_dados %}
+    <span class="ms-auto text-muted small">
+      <i class="bi bi-info-circle me-1"></i>
+      {{ mes_dados.dias_operados }} dia{{ mes_dados.dias_operados|pluralize }} operado{{ mes_dados.dias_operados|pluralize }} ·
+      {{ mes_dados.total_ops }} operaç{% if mes_dados.total_ops == 1 %}ão{% else %}ões{% endif %}
+    </span>
+    {% endif %}
+  </div>
+</form>
+
+{% if mes_dados %}
+
+{# ── Cards de resumo do mês selecionado ───────────────────────────────────── #}
+<div class="row g-3 mb-4">
+
+  {# Resultado Total #}
+  <div class="col-6 col-md-3">
+    <div class="card-kpi h-100">
+      <div class="kpi-label">Resultado Total</div>
+      <div class="kpi-value {% if mes_dados.resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        R$ {{ mes_dados.resultado|floatformat:2 }}
+      </div>
+      <div class="kpi-sub text-muted">
+        {{ mes_dados.pontos|floatformat:0 }} pts
+      </div>
+    </div>
+  </div>
+
+  {# Retorno % #}
+  <div class="col-6 col-md-3">
+    <div class="card-kpi h-100">
+      <div class="kpi-label">Retorno %</div>
+      {% if mes_dados.retorno_pct is not None %}
+        <div class="kpi-value {% if mes_dados.retorno_pct >= 0 %}val-pos{% else %}val-neg{% endif %}">
+          {% if mes_dados.retorno_pct >= 0 %}+{% endif %}{{ mes_dados.retorno_pct|floatformat:2 }}%
+        </div>
+        <div class="kpi-sub text-muted">sobre capital inicial</div>
+      {% else %}
+        <div class="kpi-value text-muted">—</div>
+        <div class="kpi-sub"><a href="/admin/trades/parametrostrader/1/change/" class="text-warning small">definir capital</a></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Win Rate #}
+  <div class="col-6 col-md-3">
+    <div class="card-kpi h-100">
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value {% if mes_dados.em >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        {{ mes_dados.win_rate|floatformat:1 }}%
+      </div>
+      <div class="kpi-sub text-muted">{{ mes_dados.wins }}W · {{ mes_dados.losses }}L</div>
+    </div>
+  </div>
+
+  {# Drawdown Máx #}
+  <div class="col-6 col-md-3">
+    <div class="card-kpi h-100">
+      <div class="kpi-label">Drawdown Máx.</div>
+      <div class="kpi-value val-neg">
+        -R$ {{ mes_dados.drawdown|floatformat:2 }}
+      </div>
+      <div class="kpi-sub text-muted">no mês</div>
+    </div>
+  </div>
+
+  {# Operações #}
+  <div class="col-6 col-md-3">
+    <div class="card-kpi h-100">
+      <div class="kpi-label">Operações</div>
+      <div class="kpi-value">{{ mes_dados.total_ops }}</div>
+      <div class="kpi-sub text-muted">{{ mes_dados.dias_operados }} pregão{{ mes_dados.dias_operados|pluralize }}</div>
+    </div>
+  </div>
+
+  {# Expectativa Matemática #}
+  <div class="col-6 col-md-3">
+    <div class="card-kpi h-100">
+      <div class="kpi-label">Expect. Matemática</div>
+      <div class="kpi-value {% if mes_dados.em >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        {% if mes_dados.em >= 0 %}+{% endif %}R$ {{ mes_dados.em|floatformat:2 }}
+      </div>
+      <div class="kpi-sub text-muted">por operação</div>
+    </div>
+  </div>
+
+  {# Payoff Ratio #}
+  <div class="col-6 col-md-3">
+    <div class="card-kpi h-100">
+      <div class="kpi-label">Payoff Ratio</div>
+      <div class="kpi-value {% if mes_dados.payoff >= 1 %}val-pos{% else %}val-neg{% endif %}">
+        {{ mes_dados.payoff|floatformat:2 }}
+      </div>
+      <div class="kpi-sub text-muted">ganho médio / perda média</div>
+    </div>
+  </div>
+
+  {# Melhor / Pior Dia #}
+  <div class="col-6 col-md-3">
+    <div class="card-kpi h-100">
+      <div class="kpi-label">Melhor / Pior Dia</div>
+      <div class="kpi-value" style="font-size:1rem; line-height:1.5;">
+        <span class="val-pos">+R$ {{ mes_dados.melhor_dia_val|floatformat:2 }}</span><br>
+        <span class="val-neg">-R$ {{ mes_dados.pior_dia_val|floatformat:2|cut:"-" }}</span>
+      </div>
+      <div class="kpi-sub text-muted">
+        {{ mes_dados.melhor_dia_dt }} · {{ mes_dados.pior_dia_dt }}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ── Gráficos ──────────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-12 col-lg-7">
+    <div class="chart-card h-100">
+      <div class="chart-title">Resultado por Mês</div>
+      {{ mes_dados.grafico_barras|safe }}
+    </div>
+  </div>
+  <div class="col-12 col-lg-5">
+    <div class="chart-card h-100">
+      <div class="chart-title">Evolução do Win Rate</div>
+      {{ mes_dados.grafico_win_rate|safe }}
+    </div>
+  </div>
+</div>
+
+{% endif %}{# /if mes_dados #}
+
+{# ── Tabela comparativa de todos os meses ─────────────────────────────────── #}
+<div class="chart-card">
+  <div class="chart-title mb-3">Comparativo Histórico</div>
+  <div class="table-responsive">
+    <table class="table table-dark table-hover table-sm mb-0" style="font-size:.85rem;">
+      <thead>
+        <tr class="text-muted">
+          <th>Mês</th>
+          <th class="text-end">Resultado</th>
+          <th class="text-end">Delta</th>
+          <th class="text-end">Pts</th>
+          <th class="text-end">Win Rate</th>
+          <th class="text-end">Δ WR</th>
+          <th class="text-end">Ops</th>
+          <th class="text-end">Δ Ops</th>
+          <th class="text-end">EM</th>
+          <th class="text-end">Payoff</th>
+          <th class="text-end">Drawdown</th>
+          <th class="text-end">Dias</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in todos_meses %}
+        <tr class="{% if m.periodo == mes_sel %}table-active fw-semibold{% endif %}">
+          <td>
+            <a href="?mes={{ m.periodo }}" class="text-decoration-none text-light">
+              {{ m.label }}
+            </a>
+          </td>
+          {# Resultado #}
+          <td class="text-end font-monospace {% if m.resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+            R$ {{ m.resultado|floatformat:2 }}
+          </td>
+          {# Delta resultado #}
+          <td class="text-end font-monospace">
+            {% if m.delta_resultado is not None %}
+              <span class="{% if m.delta_resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m.delta_resultado >= 0 %}+{% endif %}{{ m.delta_resultado|floatformat:2 }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          {# Pontos #}
+          <td class="text-end font-monospace text-muted">
+            {{ m.pontos|floatformat:0 }}
+          </td>
+          {# Win Rate #}
+          <td class="text-end {% if m.win_rate >= 50 %}val-pos{% else %}val-neg{% endif %}">
+            {{ m.win_rate|floatformat:1 }}%
+          </td>
+          {# Delta WR #}
+          <td class="text-end font-monospace">
+            {% if m.delta_win_rate is not None %}
+              <span class="{% if m.delta_win_rate >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m.delta_win_rate >= 0 %}+{% endif %}{{ m.delta_win_rate|floatformat:1 }}%
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          {# Total ops #}
+          <td class="text-end">{{ m.total_ops }}</td>
+          {# Delta ops #}
+          <td class="text-end font-monospace">
+            {% if m.delta_ops is not None %}
+              <span class="{% if m.delta_ops >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m.delta_ops >= 0 %}+{% endif %}{{ m.delta_ops }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          {# EM #}
+          <td class="text-end font-monospace {% if m.em >= 0 %}val-pos{% else %}val-neg{% endif %}">
+            {% if m.em >= 0 %}+{% endif %}{{ m.em|floatformat:2 }}
+          </td>
+          {# Payoff #}
+          <td class="text-end {% if m.payoff >= 1 %}val-pos{% else %}val-neg{% endif %}">
+            {{ m.payoff|floatformat:2 }}
+          </td>
+          {# Drawdown #}
+          <td class="text-end val-neg">
+            -{{ m.drawdown|floatformat:2 }}
+          </td>
+          {# Dias #}
+          <td class="text-end text-muted">{{ m.dias_operados }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}{# /if sem_dados #}
+{% endblock %}

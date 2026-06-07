@@ -1359,3 +1359,240 @@ def salvar_journal(request, op_id):
         'setup':   journal_obj.setup,
         'has_journal': True,
     })
+
+
+def relatorio_mensal(request):
+    """Visão consolidada por mês com comparativo mês a mês."""
+    import calendar
+
+    tz = pytz.timezone('America/Sao_Paulo')
+    params = ParametrosTrader.carregar()
+
+    # --- Filtro de mês selecionado ---
+    mes_sel = request.GET.get('mes')  # formato: "2025-11"
+
+    campos = [
+        'abertura', 'fechamento', 'resultado_operacao',
+        'resultado_operacao_pontos', 'mep', 'men',
+        'total_acumulado', 'ativo',
+    ]
+    qs = Operacao.objects.all().values(*campos)
+
+    if not qs.exists():
+        return render(request, 'trades/relatorio_mensal.html', {
+            'sem_dados': True,
+            'meses_disponiveis': [],
+            'mes_sel': None,
+            'mes_dados': None,
+            'todos_meses': [],
+        })
+
+    df = pd.DataFrame(list(qs))
+    df['abertura'] = pd.to_datetime(df['abertura'], utc=True).dt.tz_convert(tz)
+    df['fechamento'] = pd.to_datetime(
+        df['fechamento'], utc=True).dt.tz_convert(tz)
+
+    for col in ['resultado_operacao', 'resultado_operacao_pontos', 'mep', 'men']:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+    df['ano_mes'] = df['abertura'].dt.to_period('M')
+    df['data'] = df['abertura'].dt.date
+
+    # Lista de meses disponíveis (mais recente primeiro)
+    periodos = sorted(df['ano_mes'].unique(), reverse=True)
+    meses_disponiveis = [
+        {
+            'valor': str(p),
+            'label': p.to_timestamp().strftime('%B/%Y').capitalize(),
+        }
+        for p in periodos
+    ]
+
+    # Mês selecionado padrão: mais recente
+    if not mes_sel or mes_sel not in [m['valor'] for m in meses_disponiveis]:
+        mes_sel = meses_disponiveis[0]['valor'] if meses_disponiveis else None
+
+    # --- Cálculo por mês ---
+    def _metricas_mes(df_m):
+        total_ops = len(df_m)
+        if total_ops == 0:
+            return None
+        wins = (df_m['resultado_operacao'] > 0).sum()
+        losses = (df_m['resultado_operacao'] < 0).sum()
+        win_rate = (wins / total_ops * 100) if total_ops else 0
+        resultado = float(df_m['resultado_operacao'].sum())
+        pontos = float(df_m['resultado_operacao_pontos'].sum())
+
+        win_vals = df_m.loc[df_m['resultado_operacao']
+                            > 0, 'resultado_operacao']
+        loss_vals = df_m.loc[df_m['resultado_operacao']
+                             < 0, 'resultado_operacao']
+        avg_win = float(win_vals.mean()) if len(win_vals) else 0
+        avg_loss = float(loss_vals.mean()) if len(loss_vals) else 0
+        payoff = abs(avg_win / avg_loss) if avg_loss != 0 else 0
+        em = (win_rate / 100 * avg_win) + ((1 - win_rate / 100) * avg_loss)
+
+        # Drawdown do mês
+        df_ord = df_m.sort_values('abertura').copy()
+        df_ord['acum'] = df_ord['resultado_operacao'].cumsum()
+        df_ord['pico'] = df_ord['acum'].cummax()
+        drawdown = float((df_ord['pico'] - df_ord['acum']).max())
+
+        dias_operados = df_m['data'].nunique()
+        dias_positivos = df_m.groupby('data')['resultado_operacao'].sum()
+        melhor_dia_val = float(dias_positivos.max())
+        pior_dia_val = float(dias_positivos.min())
+        melhor_dia_dt = dias_positivos.idxmax()
+        pior_dia_dt = dias_positivos.idxmin()
+
+        return {
+            'total_ops': total_ops,
+            'wins': int(wins),
+            'losses': int(losses),
+            'win_rate': round(win_rate, 1),
+            'resultado': resultado,
+            'pontos': round(pontos, 0),
+            'avg_win': round(avg_win, 2),
+            'avg_loss': round(avg_loss, 2),
+            'payoff': round(payoff, 2),
+            'em': round(em, 2),
+            'drawdown': round(drawdown, 2),
+            'dias_operados': dias_operados,
+            'melhor_dia_val': round(melhor_dia_val, 2),
+            'pior_dia_val': round(pior_dia_val, 2),
+            'melhor_dia_dt': melhor_dia_dt,
+            'pior_dia_dt': pior_dia_dt,
+        }
+
+    # Todos os meses para a tabela comparativa
+    todos_meses_raw = []
+    for p in periodos:
+        df_m = df[df['ano_mes'] == p].copy()
+        m = _metricas_mes(df_m)
+        if m:
+            m['periodo'] = str(p)
+            m['label'] = p.to_timestamp().strftime('%b/%Y').capitalize()
+            todos_meses_raw.append(m)
+
+    # Delta entre meses consecutivos
+    todos_meses = []
+    for i, m in enumerate(todos_meses_raw):
+        m_copy = dict(m)
+        if i < len(todos_meses_raw) - 1:
+            ant = todos_meses_raw[i + 1]
+            m_copy['delta_resultado'] = round(
+                m['resultado'] - ant['resultado'], 2)
+            m_copy['delta_win_rate'] = round(
+                m['win_rate'] - ant['win_rate'], 1)
+            m_copy['delta_ops'] = m['total_ops'] - ant['total_ops']
+            m_copy['delta_em'] = round(m['em'] - ant['em'], 2)
+        else:
+            m_copy['delta_resultado'] = None
+            m_copy['delta_win_rate'] = None
+            m_copy['delta_ops'] = None
+            m_copy['delta_em'] = None
+        todos_meses.append(m_copy)
+
+    # Métricas do mês selecionado
+    periodo_sel = pd.Period(mes_sel, freq='M')
+    df_sel = df[df['ano_mes'] == periodo_sel].copy()
+    mes_dados = _metricas_mes(df_sel)
+
+    if mes_dados:
+        mes_dados['periodo'] = mes_sel
+        mes_dados['label'] = periodo_sel.to_timestamp().strftime(
+            '%B/%Y').capitalize()
+
+        # Retorno % sobre capital
+        capital = float(
+            params.capital_inicial) if params.capital_inicial else 0
+        if capital > 0:
+            mes_dados['retorno_pct'] = round(
+                mes_dados['resultado'] / capital * 100, 2)
+        else:
+            mes_dados['retorno_pct'] = None
+
+        # --- Gráfico de barras: resultado por mês ---
+        labels_meses = [m['label'] for m in reversed(todos_meses)]
+        vals_resultado = [m['resultado'] for m in reversed(todos_meses)]
+        cores_barras = ['#3fb68b' if v >=
+                        0 else '#e05c5c' for v in vals_resultado]
+
+        fig_barras = go.Figure()
+        fig_barras.add_trace(go.Bar(
+            x=labels_meses,
+            y=vals_resultado,
+            marker_color=cores_barras,
+            text=[f"R$ {v:,.0f}" for v in vals_resultado],
+            textposition='outside',
+            hovertemplate='%{x}<br>R$ %{y:,.2f}<extra></extra>',
+        ))
+        fig_barras.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#b8c4ce', family='monospace'),
+            margin=dict(l=10, r=10, t=10, b=40),
+            height=280,
+            xaxis=dict(showgrid=False, tickfont=dict(size=11)),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='#21262d',
+                tickprefix='R$ ',
+                tickformat=',.0f',
+                zeroline=True,
+                zerolinecolor='#444c56',
+            ),
+            showlegend=False,
+        )
+        grafico_barras = fig_barras.to_html(
+            full_html=False, include_plotlyjs=False)
+
+        # --- Gráfico de evolução do Win Rate por mês ---
+        wr_vals = [m['win_rate'] for m in reversed(todos_meses)]
+        fig_wr = go.Figure()
+        fig_wr.add_trace(go.Scatter(
+            x=labels_meses,
+            y=wr_vals,
+            mode='lines+markers',
+            line=dict(color='#4da6ff', width=2),
+            marker=dict(size=7, color='#4da6ff'),
+            fill='tozeroy',
+            fillcolor='rgba(77,166,255,0.1)',
+            hovertemplate='%{x}<br>Win Rate: %{y:.1f}%<extra></extra>',
+        ))
+        fig_wr.add_hline(
+            y=50,
+            line_dash='dash',
+            line_color='#e6a817',
+            annotation_text='50%',
+            annotation_font_color='#e6a817',
+        )
+        fig_wr.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#b8c4ce', family='monospace'),
+            margin=dict(l=10, r=10, t=10, b=40),
+            height=240,
+            xaxis=dict(showgrid=False, tickfont=dict(size=11)),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor='#21262d',
+                ticksuffix='%',
+                range=[0, 100],
+            ),
+            showlegend=False,
+        )
+        grafico_win_rate = fig_wr.to_html(
+            full_html=False, include_plotlyjs=False)
+
+        mes_dados['grafico_barras'] = grafico_barras
+        mes_dados['grafico_win_rate'] = grafico_win_rate
+
+    return render(request, 'trades/relatorio_mensal.html', {
+        'sem_dados': False,
+        'meses_disponiveis': meses_disponiveis,
+        'mes_sel': mes_sel,
+        'mes_dados': mes_dados,
+        'todos_meses': todos_meses,
+        'capital_inicial': float(params.capital_inicial) if params.capital_inicial else 0,
+    })

@@ -32,6 +32,7 @@ operacional.
 - Journal de Operações ← IMPLEMENTADO (Passo 1)
 - Retorno % sobre Capital + Drawdown no Dashboard ← IMPLEMENTADO (Passo 2)
 - Resultado em Pontos ← IMPLEMENTADO (Passo 3)
+- Relatório Mensal com comparativo histórico ← IMPLEMENTADO (Passo 4)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -81,7 +82,7 @@ trader_dashboard/
 │       ├── importar.html
 │       ├── operacoes.html
 │       ├── journal.html          ← CRIADO (Passo 1)
-│       └── relatorio_mensal.html ← A CRIAR (Passo 4)
+│       └── relatorio_mensal.html ← CRIADO (Passo 4)
 ├── .env
 ├── .gitignore
 ├── CONTEXTO_PROJETO.md
@@ -90,6 +91,7 @@ trader_dashboard/
 
 ## Configurações aplicadas
 - `INSTALLED_APPS`: app `apps.trades` registrado
+- `INSTALLED_APPS`: inclui `django.contrib.humanize` (adicionado no Passo 4)
 - `LANGUAGE_CODE`: pt-br
 - `TIME_ZONE`: America/Sao_Paulo
 - `TEMPLATES DIRS`: BASE_DIR / 'templates'
@@ -222,16 +224,16 @@ Observações do trader sobre o pregão como um todo.
   "Limites Operacionais" e "Capital"; redireciona listagem direto para edição,
   impede criação de segundo registro e impede exclusão;
   JournalOperacaoAdmin com filtros por emocao e setup
-- `apps/trades/views.py` → 7 views ativas + helpers de cálculo e gráficos
+- `apps/trades/views.py` → 8 views ativas + helpers de cálculo e gráficos
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
-  /journal/, /journal/salvar/<op_id>/
+  /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/
 - `apps/trades/services.py` → lógica de importação do CSV do Profitchart;
   mapeamento corrigido no Passo 3: resultado_operacao_pontos ← 'Res. Operação (%)',
   resultado_operacao ← 'Res. Operação'; chamada corrigida na view importar():
   importar_csv(arquivo, arquivo.name) com retorno tratado como dict
-- `templates/base.html` → sidebar com todos os links de navegação incluindo Journal;
-  .alert-warning e .val-warn no CSS global
+- `templates/base.html` → sidebar com todos os links de navegação incluindo Journal
+  e Rel. Mensal; .alert-warning e .val-warn no CSS global
 - `templates/trades/dashboard.html` → filter bar; 2 linhas de cards (linha 1:
   Resultado Total com subtítulo pts, Win Rate, Retorno %, Drawdown Máx.;
   linha 2: Operações, Wins/Losses, EM, Payoff Ratio); 4 gráficos Plotly
@@ -241,6 +243,9 @@ Observações do trader sobre o pregão como um todo.
   coluna Pts na tabela; coluna Journal com botão por linha; offcanvas drawer Bootstrap
 - `templates/trades/comportamental.html` → 5 seções de indicadores comportamentais
 - `templates/trades/journal.html` → página dedicada com filtros e métricas por setup
+- `templates/trades/relatorio_mensal.html` → página de relatório mensal: 8 cards de KPI
+  do mês selecionado, 2 gráficos Plotly (barras de resultado + linha de win rate),
+  tabela histórica comparativa com delta mês a mês colorido (Passo 4)
 - `.env` → variáveis de ambiente (SECRET_KEY, DEBUG)
 - `.gitignore` → arquivos ignorados pelo Git
 
@@ -281,8 +286,11 @@ Observações do trader sobre o pregão como um todo.
   exibido com 0 casas decimais nas tabelas; somado e exibido no subtítulo do card
   Resultado Total do dashboard
 - importar_csv(): retorna dict {'sucesso', 'total_operacoes', ...}; view trata como dict
-- Quantidade de contratos (qtd_compra/qtd_venda): já existe no model e é importada;
-  impacto em pontos vs R$ a ser tratado em passo futuro (PASSO 3-B planejado)
+- Relatório Mensal: agrupamento por Period('M') do Pandas; delta mês a mês calculado
+  para resultado, win rate, total de ops e EM; drawdown calculado inline por mês
+  (escopo mensal, não acumulado histórico); django.contrib.humanize adicionado ao
+  INSTALLED_APPS para uso futuro de filtros como intcomma
+
 
 ## Regras críticas — OBRIGATÓRIO seguir em qualquer alteração de views.py
 
@@ -327,8 +335,10 @@ Observações do trader sobre o pregão como um todo.
 
 ### Drawdown (adicionado no Passo 2)
 - Helper _drawdown_maximo(df): ordena por abertura, cumsum, cummax, retorna max(pico - atual)
-- Reutilizar _drawdown_maximo() em qualquer view que precisar de drawdown
-- NUNCA recalcular drawdown inline nas views; sempre usar o helper
+- Reutilizar _drawdown_maximo() em qualquer view que precisar de drawdown acumulado
+- NUNCA recalcular drawdown inline nas views para o dashboard; sempre usar o helper
+- Exceção: relatorio_mensal() calcula drawdown inline por mês (escopo mensal isolado,
+  não usa o helper pois o acumulado é reiniciado a cada mês)
 
 ### Resultado em Pontos (adicionado no Passo 3)
 - Campo no model: resultado_operacao_pontos (DecimalField 10,2)
@@ -365,7 +375,7 @@ Observações do trader sobre o pregão como um todo.
 - 15 dias de pregão
 - Período: novembro/2025 até maio/2026
 - Instrumento: WIN (mini índice) em vários vencimentos
-- Nota: identificada operação com 2 contratos — impacto em pontos vs R$ a tratar (Passo 3-B)
+
 
 ## Gráficos implementados
 
@@ -380,6 +390,10 @@ Observações do trader sobre o pregão como um todo.
 2. Resultado por Horário → barras por HH:MM
 3. Análise de Execução → MEP/MEN/Resultado; barras horizontais; altura dinâmica
 
+### Página Relatório Mensal
+1. Resultado por Mês → barras verticais coloridas individualmente; tickprefix R$
+2. Evolução do Win Rate → linha com fill tozeroy; linha de referência 50% tracejada amarela
+
 ### Página Comportamental
 1. Overtrading → eixo duplo: barras resultado + linha qtd ops; limiar amarelo tracejado
 2. Consistência → barras resultado por dia; linha zero destacada
@@ -390,6 +404,7 @@ Observações do trader sobre o pregão como um todo.
 - Drawdown Máximo → _drawdown_maximo(df); Dashboard (Passo 2)
 - Retorno % sobre Capital → dashboard(); requer capital_inicial > 0 (Passo 2)
 - Resultado em Pontos → resultado_operacao_pontos; Dashboard (subtítulo), Dia e Operações (Passo 3)
+- Relatório Mensal → agrupamento por Period('M'); delta mês a mês; retorno % sobre capital (Passo 4)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades
@@ -463,57 +478,32 @@ o que fazer, quais arquivos alterar e os detalhes de implementação.
 - resultado_operacao_pontos recebia valor errado (igual a resultado_operacao) pois
   apontava para coluna CSV errada ('Res. Intervalo Bruto' → corrigido para 'Res. Operação (%)')
 
-**Observação registrada:**
-- Identificada operação com 2 contratos no histórico; diferença entre pontos e R$
-  ocorre quando qtd_compra/qtd_venda > 1; tratamento planejado como PASSO 3-B
-
 ---
 
-### PASSO 3-B — Normalização de Pontos por Contrato ← PLANEJADO
-**Objetivo:** garantir que a exibição de pontos seja sempre por contrato,
-independente da quantidade operada. Evita distorção onde 2 contratos com
-50 pts cada aparecem como 100 pts totais, mascarando a eficiência real.
+### PASSO 4 — Página de Relatório Mensal ★★★★★ ✅ CONCLUÍDO
+**O que foi implementado:**
+- View `relatorio_mensal()`: agrupa operações por `Period('M')` do Pandas;
+  calcula por mês: resultado, pontos, win rate, EM, payoff ratio, drawdown,
+  melhor/pior dia, retorno % (se capital_inicial > 0); delta mês a mês para
+  resultado, win rate, total de ops e EM
+- Rota `/relatorio-mensal/` adicionada ao urls.py
+- `relatorio_mensal.html`: 8 cards de KPI do mês selecionado (2 linhas de 4),
+  2 gráficos Plotly (barras de resultado por mês + linha de evolução do win rate),
+  tabela histórica comparativa com deltas coloridos; linha do mês selecionado
+  destacada com table-active; link "—" para Admin quando capital_inicial não
+  configurado; filtro por mês via GET com padrão no mês mais recente
+- `django.contrib.humanize` adicionado ao INSTALLED_APPS em core/settings/base.py
+- Link "Rel. Mensal" adicionado ao sidebar do base.html
 
-**Contexto:** qtd_compra e qtd_venda já existem no model e são importados.
-resultado_operacao_pontos atual reflete o total da operação (pontos × contratos).
+**Detalhes técnicos:**
+- Drawdown calculado inline por mês (escopo mensal isolado; não usa _drawdown_maximo
+  global pois o acumulado é reiniciado a cada mês)
+- include_plotlyjs=False em todos os to_html() — padrão do projeto
+- Datas convertidas para America/Sao_Paulo antes de qualquer uso
 
-**Decisão a tomar antes de implementar:**
-- Exibir pontos por contrato (resultado_operacao_pontos / qtd_compra)?
-- Exibir pontos totais da operação (comportamento atual)?
-- Exibir ambos?
-
-**Arquivos a alterar (após decisão):**
-- `apps/trades/views.py`: normalizar resultado_operacao_pontos / qtd_compra
-  nas views dia(), operacoes() e dashboard() se optar por pontos por contrato
-- `templates/trades/dia.html`, `operacoes.html`, `dashboard.html`:
-  ajustar label da coluna (ex: "Pts/ctr" em vez de "Pts")
-
----
-
-### PASSO 4 — Página de Relatório Mensal ★★★★★
-**Objetivo:** visão consolidada por mês com todas as métricas;
-comparativo mês a mês; base para exportação PDF.
-
-**Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view relatorio_mensal():
-  - Agrupar operações por ano/mês
-  - Para cada mês calcular: resultado, win rate, payoff ratio, EM,
-    drawdown, total ops, dias operados, melhor dia, pior dia
-  - Calcular delta mês a mês (variação de cada métrica)
-  - Passar lista de meses com todas as métricas ao context
-- `apps/trades/urls.py` → rota /relatorio-mensal/
-- `templates/trades/relatorio_mensal.html` → criar página com:
-  - Cards de resumo do mês selecionado (filtro por mês/ano)
-  - Tabela comparativa de todos os meses com delta colorido
-  - Gráfico de barras de resultado por mês
-  - Gráfico de evolução do win rate por mês
-  - Botão "Exportar PDF" (integrado com Passo 16)
-- `templates/base.html` → adicionar link no sidebar
-
-**Detalhes de implementação:**
-- Filtro por mês: select com opções geradas dinamicamente a partir dos dados
-- Delta colorido: verde se melhorou, vermelho se piorou vs mês anterior
-- Mês selecionado padrão: mês mais recente com dados
+**Bug corrigido:**
+- `{% load humanize %}` no template causava TemplateSyntaxError pois
+  django.contrib.humanize não estava em INSTALLED_APPS → adicionado ao base.py
 
 ---
 
@@ -713,13 +703,13 @@ Falta apenas o card Win Rate da página Dia.
 ### ORDEM DE EXECUÇÃO RECOMENDADA
 
 Fase 1 — Fundação analítica:
-  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → Passo 3-B → Passo 7 → Passo 9
+  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → Passo 7 → Passo 9
 
 Fase 2 — Diferencial competitivo:
   ~~Passo 1~~ ✅ → Passo 6 → Passo 10 → Passo 14 → Passo 17
 
 Fase 3 — Visão de negócio:
-  Passo 4 → Passo 12 → Passo 16
+  ~~Passo 4~~ ✅ → Passo 12 → Passo 16
 
 Fase 4 — Refinamentos comportamentais:
   ~~Passo 5~~ ✅ → Passo 8 → Passo 11 → Passo 13 → Passo 15
