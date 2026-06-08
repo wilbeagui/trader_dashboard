@@ -35,6 +35,7 @@ operacional.
 - Relatório Mensal com comparativo histórico ← IMPLEMENTADO (Passo 4)
 - Anotação do Dia com score automático ← IMPLEMENTADO (Passo 6)
 - Gráfico de Drawdown no Dashboard ← IMPLEMENTADO (Passo 7)
+- Avaliação Relativa no Revenge Trading ← IMPLEMENTADO (Passo 8)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -233,7 +234,8 @@ Observações do trader sobre o pregão como um todo.
   AnotacaoDiaAdmin com list_display (data_sessao, estado_emocional, score_dia,
   atualizado_em), list_filter por estado_emocional, ordering por -data_sessao
 - `apps/trades/views.py` → 8 views ativas + helpers de cálculo e gráficos;
-  inclui _grafico_drawdown(df) adicionado no Passo 7
+  inclui _grafico_drawdown(df) adicionado no Passo 7;
+  _calcular_comportamental() atualizado no Passo 8 com revenge_pct e avaliação relativa
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
   /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/
@@ -252,7 +254,9 @@ Observações do trader sobre o pregão como um todo.
 - `templates/trades/importar.html` → upload drag-and-drop + exclusão por data/ativo
 - `templates/trades/operacoes.html` → listagem com filtros, paginação, 4 cards;
   coluna Pts na tabela; coluna Journal com botão por linha; offcanvas drawer Bootstrap
-- `templates/trades/comportamental.html` → 5 seções de indicadores comportamentais
+- `templates/trades/comportamental.html` → 5 seções de indicadores comportamentais;
+  seção Revenge Trading atualizada no Passo 8: card Episódios exibe contagem + %
+  relativo; card Avaliação usa revenge_avaliacao/revenge_cor do backend
 - `templates/trades/journal.html` → página dedicada com filtros e métricas por setup
 - `templates/trades/relatorio_mensal.html` → página de relatório mensal: 8 cards de KPI
   do mês selecionado, 2 gráficos Plotly (barras de resultado + linha de win rate),
@@ -314,6 +318,11 @@ Observações do trader sobre o pregão como um todo.
   (sempre <= 0); área vermelha fill='tozeroy'; anotação automática no ponto de máximo;
   altura 160px; eixo X oculto com type='category'; exibido abaixo da Curva de Capital
   dentro do mesmo chart-card separado por <hr>; renderização condicional no template
+- Revenge Trading (Passo 8): avaliação relativa via revenge_pct = episódios /
+  (total_ops - 1) × 100; limiares: Nenhum (0%), Baixo (< 5%), Moderado (< 15%),
+  Alto (≥ 15%); revenge_avaliacao e revenge_cor calculados no backend e passados ao
+  template; card Episódios exibe percentual no kpi-sub quando revenge_pct > 0;
+  divisor total_ops-1 porque a primeira operação nunca pode ser revenge
 
 
 ## Regras críticas — OBRIGATÓRIO seguir em qualquer alteração de views.py
@@ -402,6 +411,18 @@ Observações do trader sobre o pregão como um todo.
 - Score calculado: resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%);
   régua resultado ±R$500; dias sem losers = nota 5 no componente MEN
 
+### Revenge Trading — Avaliação Relativa (adicionado no Passo 8)
+- revenge_pct = revenge_total / (total_ops - 1) × 100 quando total_ops > 1, senão 0.0
+- Divisor é total_ops-1 porque a primeira operação nunca pode ser revenge
+- revenge_avaliacao e revenge_cor calculados em _calcular_comportamental(), não no template
+- Limiares: revenge_pct == 0 → "Nenhum"/success; < 5% → "Baixo"/success;
+  < 15% → "Moderado"/warning; ≥ 15% → "Alto"/danger
+- NUNCA usar revenge_total diretamente para avaliação (limiar absoluto foi removido)
+- Três chaves obrigatórias no return: "revenge_pct", "revenge_avaliacao", "revenge_cor"
+- Template comportamental.html: card Avaliação usa {{ revenge_avaliacao }} e
+  condicional baseado em revenge_avaliacao (string), não em revenge_total (int)
+- Card Episódios: kpi-sub exibe "X% das operações" quando revenge_pct > 0
+
 ### Bootstrap Icons
 - Versão em uso: 1.11.3
 - Verificar existência antes de usar; bi-brain NÃO existe → usar bi-person-check
@@ -448,9 +469,11 @@ Observações do trader sobre o pregão como um todo.
 - Resultado em Pontos → resultado_operacao_pontos; Dashboard (subtítulo), Dia e Operações (Passo 3)
 - Relatório Mensal → agrupamento por Period('M'); delta mês a mês; retorno % sobre capital (Passo 4)
 - Score do Dia Calculado → dia(); resultado 40% + WR 20% + MEP 20% + MEN 20%; escala 0–10 (Passo 6)
+- Revenge Trading Relativo → revenge_pct; avaliação por % em vez de contagem absoluta (Passo 8)
 
 ## Indicadores comportamentais implementados
-1. Revenge Trading — limiar: tempo_minimo_entre_trades
+1. Revenge Trading — limiar: tempo_minimo_entre_trades; avaliação relativa via
+   revenge_pct (Passo 8): Nenhum/Baixo < 5% / Moderado < 15% / Alto ≥ 15%
 2. Overtrading — limiar: max_operacoes_dia
 3. Aproveitamento MEP — resultado/MEP × 100 nas winners
 4. Gestão de Stop MEN — |MEN|/|resultado| × 100 nas losers
@@ -596,17 +619,27 @@ o que fazer, quais arquivos alterar e os detalhes de implementação.
 
 ---
 
-### PASSO 8 — Avaliação Relativa no Revenge Trading ★★★★☆
-**Objetivo:** corrigir distorção estatística: calcular % de episódios
-sobre total de operações em vez de contagem absoluta.
+### PASSO 8 — Avaliação Relativa no Revenge Trading ★★★★☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- `_calcular_comportamental()` em views.py:
+  - Cálculo de `revenge_pct` = revenge_total / (total_ops - 1) × 100
+    (divisor total_ops-1 porque a primeira operação nunca pode ser revenge)
+  - `revenge_avaliacao` e `revenge_cor` derivados do percentual:
+    0% → "Nenhum"/success; < 5% → "Baixo"/success;
+    < 15% → "Moderado"/warning; ≥ 15% → "Alto"/danger
+  - Três novas chaves no return: "revenge_pct", "revenge_avaliacao", "revenge_cor"
+- `comportamental.html`:
+  - Card "Episódios": kpi-sub exibe "X% das operações" quando revenge_pct > 0
+  - Card "Avaliação": classe CSS e texto gerados a partir de revenge_avaliacao
+    (backend), eliminando lógica de limiar absoluto no template
+  - kpi-sub do card Avaliação exibe o percentual contextualizado por nível
 
-**Arquivos a alterar:**
-- `apps/trades/views.py` → _calcular_comportamental():
-  - Adicionar revenge_pct = revenge_total / (total_ops - 1) * 100
-  - Ajustar limiares de avaliação: baixo < 5%, moderado < 15%, alto >= 15%
-- `templates/trades/comportamental.html` → card "Episódios":
-  - Exibir contagem e percentual: "3 (7.5%)"
-  - Ajustar lógica de coloração para usar revenge_pct nos limiares
+**Motivação:** corrigir distorção estatística onde trader com 4 ops e 2 revenge
+recebia mesma avaliação que trader com 100 ops e 2 revenge. A métrica relativa
+torna a avaliação proporcional ao volume operado.
+
+**Arquivos alterados:** `apps/trades/views.py`, `templates/trades/comportamental.html`
+**Sem migração de banco necessária.**
 
 ---
 
@@ -749,7 +782,7 @@ Fase 3 — Visão de negócio:
   ~~Passo 4~~ ✅ → Passo 12 → Passo 16
 
 Fase 4 — Refinamentos comportamentais:
-  ~~Passo 5~~ ✅ → Passo 8 → Passo 11 → Passo 13 → Passo 15
+  ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → Passo 11 → Passo 13 → Passo 15
 
 Fase 5 — Infraestrutura para comercialização:
   Passo 18 → Passo 19 → Passo 20

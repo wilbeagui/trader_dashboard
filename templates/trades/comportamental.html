@@ -196,12 +196,19 @@
 
   <div class="row g-3 mb-3">
 
+    <!-- Card: Episódios — exibe contagem + percentual relativo -->
     <div class="col-6 col-xl-3">
       <div class="kpi-card {% if revenge_total > 0 %}neg{% else %}pos{% endif %}">
         <div class="kpi-icon"><i class="bi bi-exclamation-octagon"></i></div>
         <div class="kpi-label">Episódios</div>
         <div class="kpi-value">{{ revenge_total }}</div>
-        <div class="kpi-sub">operações suspeitas</div>
+        <div class="kpi-sub">
+          {% if revenge_pct > 0 %}
+            {{ revenge_pct|floatformat:1 }}% das operações
+          {% else %}
+            operações suspeitas
+          {% endif %}
+        </div>
       </div>
     </div>
 
@@ -229,26 +236,23 @@
       </div>
     </div>
 
+    <!-- Card: Avaliação — baseada em % relativo (Passo 8) -->
     <div class="col-6 col-xl-3">
-      <div class="kpi-card {% if revenge_total == 0 %}pos{% else %}warn{% endif %}">
+      <div class="kpi-card {% if revenge_avaliacao == 'Nenhum' or revenge_avaliacao == 'Baixo' %}pos{% elif revenge_avaliacao == 'Moderado' %}warn{% else %}neg{% endif %}">
         <div class="kpi-icon"><i class="bi bi-shield-check"></i></div>
         <div class="kpi-label">Avaliação</div>
         <div class="kpi-value" style="font-size:16px;">
-          {% if revenge_total == 0 %}
-            Nenhum
-          {% elif revenge_total <= 2 %}
-            Baixo
-          {% elif revenge_total <= 5 %}
-            Moderado
-          {% else %}
-            Alto
-          {% endif %}
+          {{ revenge_avaliacao }}
         </div>
         <div class="kpi-sub">
-          {% if revenge_total == 0 %}sem episódios no período
-          {% elif revenge_total <= 2 %}poucos episódios
-          {% elif revenge_total <= 5 %}atenção ao comportamento
-          {% else %}padrão preocupante
+          {% if revenge_avaliacao == 'Nenhum' %}
+            sem episódios no período
+          {% elif revenge_avaliacao == 'Baixo' %}
+            {{ revenge_pct|floatformat:1 }}% das operações
+          {% elif revenge_avaliacao == 'Moderado' %}
+            {{ revenge_pct|floatformat:1 }}% — atenção ao comportamento
+          {% else %}
+            {{ revenge_pct|floatformat:1 }}% — padrão preocupante
           {% endif %}
         </div>
       </div>

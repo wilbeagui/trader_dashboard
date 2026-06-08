@@ -14,10 +14,10 @@ from django.utils import timezone
 from django.db.models import QuerySet
 from django.shortcuts import render, redirect, get_object_or_404
 
-from .models import (ImportacaoArquivo, Operacao, 
-                     ParametrosTrader, SessaoOperacao, 
+from .models import (ImportacaoArquivo, Operacao,
+                     ParametrosTrader, SessaoOperacao,
                      JournalOperacao, AnotacaoDia,
-)
+                     )
 
 from .services import importar_csv  # noqa: F401
 
@@ -97,7 +97,7 @@ def _qs_to_df(qs) -> pd.DataFrame:
         "tempo_operacao", "qtd_compra", "qtd_venda",
         "preco_compra", "preco_venda",
         "resultado_operacao", "total_acumulado",
-        "sessao__data_sessao","resultado_operacao_pontos",
+        "sessao__data_sessao", "resultado_operacao_pontos",
     ]
     registros = list(qs.values(*campos))
     if not registros:
@@ -197,6 +197,7 @@ def _grafico_drawdown(df: pd.DataFrame) -> str:
 # ──────────────────────────────────────────────
 # Helpers de cálculo — dia()
 # ──────────────────────────────────────────────
+
 
 def _calcular_tempo_medio_str(minutos_lista: list[float]) -> str:
     if not minutos_lista:
@@ -331,6 +332,27 @@ def _calcular_comportamental(df: pd.DataFrame, params: ParametrosTrader) -> dict
     revenge_win_count = sum(1 for r in revenge_ops if r["resultado"] > 0)
     revenge_loss_count = revenge_total - revenge_win_count
 
+    # Avaliação relativa: % de episódios sobre o total de operações do período
+    # (divide por total-1 pois a primeira op nunca pode ser revenge)
+    total_ops_periodo = len(df)
+    revenge_pct = (
+        round(revenge_total / (total_ops_periodo - 1) * 100, 1)
+        if total_ops_periodo > 1 else 0.0
+    )
+
+    if revenge_pct == 0:
+        revenge_avaliacao = "Nenhum"
+        revenge_cor = "success"
+    elif revenge_pct < 5:
+        revenge_avaliacao = "Baixo"
+        revenge_cor = "success"
+    elif revenge_pct < 15:
+        revenge_avaliacao = "Moderado"
+        revenge_cor = "warning"
+    else:
+        revenge_avaliacao = "Alto"
+        revenge_cor = "danger"
+
     # ── 2. Overtrading ─────────────────────────────────────────────
     limiar_ops = params.max_operacoes_dia
 
@@ -446,6 +468,9 @@ def _calcular_comportamental(df: pd.DataFrame, params: ParametrosTrader) -> dict
         "limiar_overtrading": limiar_ops,
         # 1. Revenge Trading
         "revenge_total":      revenge_total,
+        "revenge_pct":        revenge_pct,
+        "revenge_avaliacao":  revenge_avaliacao,
+        "revenge_cor":        revenge_cor,
         "revenge_resultado":  revenge_resultado,
         "revenge_win_count":  revenge_win_count,
         "revenge_loss_count": revenge_loss_count,
@@ -918,6 +943,7 @@ def dashboard(request):
     }
     return render(request, "trades/dashboard.html", context)
 
+
 def operacoes(request):
     data_inicio, data_fim, qs = _filtrar_operacoes(request)
     instrumento = request.GET.get("instrumento", "").strip()
@@ -1040,6 +1066,7 @@ def operacoes(request):
         "setups_existentes":  setups_existentes,
     }
     return render(request, "trades/operacoes.html", context)
+
 
 def importar(request):
     resultado = None
@@ -1313,6 +1340,7 @@ def dia(request):
         "emocao_choices":      AnotacaoDia.EMOCAO_CHOICES,
     }
     return render(request, "trades/dia.html", context)
+
 
 def comportamental(request):
     """
