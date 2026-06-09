@@ -36,6 +36,7 @@ operacional.
 - Anotação do Dia com score automático ← IMPLEMENTADO (Passo 6)
 - Gráfico de Drawdown no Dashboard ← IMPLEMENTADO (Passo 7)
 - Avaliação Relativa no Revenge Trading ← IMPLEMENTADO (Passo 8)
+- Win Rate Contextualizado pela EM ← IMPLEMENTADO (Passo 9)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -250,7 +251,8 @@ Observações do trader sobre o pregão como um todo.
   linha 2: Operações, Wins/Losses, EM, Payoff Ratio); 5 gráficos Plotly
   (Curva de Capital + Drawdown no mesmo chart-card, Horário, Ativos, Heat Map)
 - `templates/trades/dia.html` → 4 linhas de KPIs; card Anotação do Pregão (Passo 6);
-  3 gráficos; tabela com coluna Pts
+  3 gráficos; tabela com coluna Pts; card Win Rate atualizado no Passo 9:
+  cor baseada em payoff_ratio_dia >= 1 (verde) com fallback para win_rate >= 50
 - `templates/trades/importar.html` → upload drag-and-drop + exclusão por data/ativo
 - `templates/trades/operacoes.html` → listagem com filtros, paginação, 4 cards;
   coluna Pts na tabela; coluna Journal com botão por linha; offcanvas drawer Bootstrap
@@ -318,6 +320,10 @@ Observações do trader sobre o pregão como um todo.
   (sempre <= 0); área vermelha fill='tozeroy'; anotação automática no ponto de máximo;
   altura 160px; eixo X oculto com type='category'; exibido abaixo da Curva de Capital
   dentro do mesmo chart-card separado por <hr>; renderização condicional no template
+- Win Rate no Dia (Passo 9): cor do card baseada em payoff_ratio_dia >= 1 (verde) ou
+  < 1 (vermelho); fallback para win_rate >= 50 quando não há wins e losses simultâneos;
+  kpi-sub contextualiza: "ganhos compensam as perdas" / "payoff insuficiente para o WR" /
+  "X W · Y L" (fallback); mesma lógica já aplicada no Dashboard desde o Passo 2
 - Revenge Trading (Passo 8): avaliação relativa via revenge_pct = episódios /
   (total_ops - 1) × 100; limiares: Nenhum (0%), Baixo (< 5%), Moderado (< 15%),
   Alto (≥ 15%); revenge_avaliacao e revenge_cor calculados no backend e passados ao
@@ -411,6 +417,15 @@ Observações do trader sobre o pregão como um todo.
 - Score calculado: resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%);
   régua resultado ±R$500; dias sem losers = nota 5 no componente MEN
 
+### Win Rate Contextualizado pela EM (adicionado no Passo 9)
+- Card Win Rate da página Dia: cor baseada em payoff_ratio_dia, não em win_rate >= 50
+- Lógica: se payoff_ratio_dia is not None → pos se >= 1, neg se < 1
+  fallback (só wins ou só losses): pos se win_rate >= 50, neg caso contrário
+- kpi-sub: exibe texto interpretativo quando payoff_ratio_dia disponível;
+  exibe "X W · Y L" apenas no fallback (sem wins e losses simultâneos)
+- NUNCA usar win_rate >= 50 como critério primário de cor no card Win Rate do Dia
+- Mesma lógica já vigente no Dashboard (implementada no Passo 2)
+
 ### Revenge Trading — Avaliação Relativa (adicionado no Passo 8)
 - revenge_pct = revenge_total / (total_ops - 1) × 100 quando total_ops > 1, senão 0.0
 - Divisor é total_ops-1 porque a primeira operação nunca pode ser revenge
@@ -470,6 +485,7 @@ Observações do trader sobre o pregão como um todo.
 - Relatório Mensal → agrupamento por Period('M'); delta mês a mês; retorno % sobre capital (Passo 4)
 - Score do Dia Calculado → dia(); resultado 40% + WR 20% + MEP 20% + MEN 20%; escala 0–10 (Passo 6)
 - Revenge Trading Relativo → revenge_pct; avaliação por % em vez de contagem absoluta (Passo 8)
+- Win Rate Contextualizado → cor do card Dia baseada em payoff_ratio_dia >= 1 (Passo 9)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades; avaliação relativa via
@@ -643,13 +659,22 @@ torna a avaliação proporcional ao volume operado.
 
 ---
 
-### PASSO 9 — Win Rate Contextualizado pela EM ★★★★☆ — PARCIALMENTE ANTECIPADO
-**Status:** card Win Rate do Dashboard já implementado no Passo 2.
-Falta apenas o card Win Rate da página Dia.
+### PASSO 9 — Win Rate Contextualizado pela EM ★★★★☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- `dia.html` → card Win Rate (linha 1 de KPIs):
+  - Classe CSS do kpi-card agora usa `payoff_ratio_dia` como critério primário:
+    `pos` se payoff_ratio_dia >= 1, `neg` se < 1
+  - Fallback para `win_rate >= 50` quando payoff_ratio_dia é None
+    (dia só com wins ou só com losses — sem base para calcular payoff)
+  - `kpi-sub` contextualizado: "ganhos compensam as perdas" (payoff >= 1),
+    "payoff insuficiente para o WR" (payoff < 1), "X W · Y L" (fallback)
 
-**Arquivos a alterar:**
-- `templates/trades/dia.html` → card Win Rate:
-  - Mesma lógica usando payoff_ratio_dia como proxy (>= 1 = verde)
+**Motivação:** win rate isolado é enganoso — 70% WR com payoff 0.3 é pior que
+40% WR com payoff 2.5. A cor agora reflete se o resultado líquido é sustentável.
+Consistência com o Dashboard, que já usava essa lógica desde o Passo 2.
+
+**Arquivos alterados:** `templates/trades/dia.html`
+**Sem alteração em views.py. Sem migração de banco necessária.**
 
 ---
 
@@ -773,7 +798,7 @@ Falta apenas o card Win Rate da página Dia.
 ### ORDEM DE EXECUÇÃO RECOMENDADA
 
 Fase 1 — Fundação analítica:
-  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → ~~Passo 7~~ ✅ → Passo 9
+  ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → ~~Passo 7~~ ✅ → ~~Passo 9~~ ✅
 
 Fase 2 — Diferencial competitivo:
   ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → Passo 10 → Passo 14 → ~~Passo 17~~ ✅

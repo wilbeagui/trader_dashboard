@@ -136,13 +136,23 @@
     </div>
   </div>
 
-  <!-- Win Rate -->
+  <!-- Win Rate — cor baseada no Payoff Ratio (Passo 9) -->
   <div class="col-6 col-xl-4">
-    <div class="kpi-card {% if win_rate >= 50 %}pos{% else %}neg{% endif %}">
+    <div class="kpi-card {% if payoff_ratio_dia is not None %}{% if payoff_ratio_dia >= 1 %}pos{% else %}neg{% endif %}{% elif win_rate >= 50 %}pos{% else %}neg{% endif %}">
       <div class="kpi-icon"><i class="bi bi-bullseye"></i></div>
       <div class="kpi-label">Win Rate</div>
       <div class="kpi-value">{{ win_rate|floatformat:1 }}%</div>
-      <div class="kpi-sub">{{ total_wins }}W · {{ total_losses }}L</div>
+      <div class="kpi-sub">
+        {% if payoff_ratio_dia is not None %}
+          {% if payoff_ratio_dia >= 1 %}
+            ganhos compensam as perdas
+          {% else %}
+            payoff insuficiente para o WR
+          {% endif %}
+        {% else %}
+          {{ total_wins }}W · {{ total_losses }}L
+        {% endif %}
+      </div>
     </div>
   </div>
 
