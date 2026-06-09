@@ -869,6 +869,77 @@ def _grafico_execucao(df: pd.DataFrame) -> str:
 
 
 # ──────────────────────────────────────────────
+# Gráficos — analise_setup()
+# ──────────────────────────────────────────────
+
+def _grafico_analise_setup(metricas: list) -> str:
+    """
+    Barras horizontais de resultado total por setup.
+    Exclui o grupo '(sem setup)' se existir outros grupos.
+    """
+    dados = [m for m in metricas if not m.get("sem_setup")]
+    if not dados:
+        dados = metricas  # fallback: mostra tudo
+    if not dados:
+        return ""
+
+    nomes     = [m["nome"]           for m in dados]
+    resultados = [m["resultado_total"] for m in dados]
+    win_rates  = [m["win_rate"]        for m in dados]
+    cores      = [COR_POSITIVO if r >= 0 else COR_NEGATIVO for r in resultados]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=resultados,
+        y=nomes,
+        orientation="h",
+        marker_color=cores,
+        text=[f"R$ {r:,.0f}" for r in resultados],
+        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Resultado: R$ %{x:,.2f}<extra></extra>",
+    ))
+    fig.update_layout(**_layout_base(
+        height=max(220, 60 + len(dados) * 44),
+        xaxis=dict(gridcolor=COR_GRADE, zerolinecolor=COR_GRADE,
+                   tickprefix="R$ ", tickformat=",.0f"),
+        yaxis=dict(gridcolor=COR_GRADE, showgrid=False),
+    ))
+    return _to_html(fig)
+
+
+def _grafico_analise_tag(metricas: list) -> str:
+    """
+    Barras horizontais de resultado total por tag.
+    Mostra no máximo 15 tags ordenadas por resultado.
+    """
+    dados = metricas[:15]
+    if not dados:
+        return ""
+
+    nomes      = [m["nome"]           for m in dados]
+    resultados = [m["resultado_total"] for m in dados]
+    cores      = [COR_POSITIVO if r >= 0 else COR_NEGATIVO for r in resultados]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=resultados,
+        y=nomes,
+        orientation="h",
+        marker_color=cores,
+        text=[f"R$ {r:,.0f}" for r in resultados],
+        textposition="outside",
+        hovertemplate="<b>#%{y}</b><br>Resultado: R$ %{x:,.2f}<extra></extra>",
+    ))
+    fig.update_layout(**_layout_base(
+        height=max(220, 60 + len(dados) * 44),
+        xaxis=dict(gridcolor=COR_GRADE, zerolinecolor=COR_GRADE,
+                   tickprefix="R$ ", tickformat=",.0f"),
+        yaxis=dict(gridcolor=COR_GRADE, showgrid=False),
+    ))
+    return _to_html(fig)
+
+
+# ──────────────────────────────────────────────
 # Views
 # ──────────────────────────────────────────────
 
@@ -1526,6 +1597,176 @@ def salvar_journal(request, op_id):
         'setup':   journal_obj.setup,
         'has_journal': True,
     })
+
+
+def analise_setup(request):
+    """
+    Análise de performance agrupada por setup e por tag do Journal.
+    Suporta filtro de período (data_inicio / data_fim).
+    Depende do Passo 1 (JournalOperacao).
+    """
+    from django.db.models import Avg, Count, Sum
+
+    data_inicio = request.GET.get("data_inicio", "").strip()
+    data_fim    = request.GET.get("data_fim",    "").strip()
+    setup_sel   = request.GET.get("setup",       "").strip()
+
+    # ── Base: operações que têm journal ─────────────────────────────
+    qs = JournalOperacao.objects.select_related("operacao").all()
+
+    if data_inicio:
+        qs = qs.filter(operacao__abertura__date__gte=data_inicio)
+    if data_fim:
+        qs = qs.filter(operacao__abertura__date__lte=data_fim)
+
+    total_com_journal = qs.count()
+
+    if total_com_journal == 0:
+        return render(request, "trades/analise_setup.html", {
+            "sem_dados":    True,
+            "data_inicio":  data_inicio,
+            "data_fim":     data_fim,
+        })
+
+    # ── Métricas por Setup ───────────────────────────────────────────
+    # Coleta todos os registros uma vez para calcular EM e payoff
+    todos_journals = list(qs.select_related("operacao"))
+
+    def _metricas_grupo(journals_grupo):
+        """Calcula métricas completas de uma lista de JournalOperacao."""
+        resultados = [float(j.operacao.resultado_operacao) for j in journals_grupo]
+        total      = len(resultados)
+        if total == 0:
+            return None
+
+        wins   = [r for r in resultados if r > 0]
+        losses = [r for r in resultados if r <= 0]
+        n_wins   = len(wins)
+        n_losses = len(losses)
+
+        win_rate     = (n_wins / total * 100) if total else 0.0
+        resultado_total = sum(resultados)
+        media_resultado = resultado_total / total
+
+        gain_medio = (sum(wins)   / n_wins)   if n_wins   else None
+        loss_medio = (sum(losses) / n_losses) if n_losses else None
+
+        if gain_medio is not None and loss_medio is not None:
+            payoff = round(gain_medio / abs(loss_medio), 2)
+            em     = round((win_rate / 100 * gain_medio) +
+                           ((1 - win_rate / 100) * loss_medio), 2)
+        else:
+            payoff = None
+            em     = None
+
+        q_entradas = [j.qualidade_entrada for j in journals_grupo
+                      if j.qualidade_entrada is not None]
+        q_saidas   = [j.qualidade_saida   for j in journals_grupo
+                      if j.qualidade_saida   is not None]
+
+        return {
+            "total":            total,
+            "n_wins":           n_wins,
+            "n_losses":         n_losses,
+            "win_rate":         round(win_rate, 1),
+            "resultado_total":  round(resultado_total, 2),
+            "media_resultado":  round(media_resultado, 2),
+            "gain_medio":       round(gain_medio, 2) if gain_medio is not None else None,
+            "loss_medio":       round(loss_medio, 2) if loss_medio is not None else None,
+            "payoff":           payoff,
+            "em":               em,
+            "q_entrada_media":  round(sum(q_entradas) / len(q_entradas), 1) if q_entradas else None,
+            "q_saida_media":    round(sum(q_saidas)   / len(q_saidas),   1) if q_saidas   else None,
+        }
+
+    # Agrupamento por setup
+    from collections import defaultdict
+    grupos_setup = defaultdict(list)
+    grupos_tag   = defaultdict(list)
+
+    for j in todos_journals:
+        chave = j.setup.strip() if j.setup and j.setup.strip() else "(sem setup)"
+        grupos_setup[chave].append(j)
+
+        # Cada tag é tratada separadamente
+        for tag in j.tags_lista():
+            grupos_tag[tag].append(j)
+
+    metricas_setup = []
+    for nome, journals_grupo in sorted(grupos_setup.items(),
+                                       key=lambda x: x[0] == "(sem setup)"):
+        m = _metricas_grupo(journals_grupo)
+        if m:
+            m["nome"] = nome
+            m["sem_setup"] = (nome == "(sem setup)")
+            metricas_setup.append(m)
+
+    # Ordena por resultado total decrescente (sem setup vai pro fim)
+    metricas_setup.sort(key=lambda x: (x["sem_setup"], -x["resultado_total"]))
+
+    # Agrupamento por tag
+    metricas_tag = []
+    for nome, journals_grupo in grupos_tag.items():
+        m = _metricas_grupo(journals_grupo)
+        if m:
+            m["nome"] = nome
+            metricas_tag.append(m)
+    metricas_tag.sort(key=lambda x: -x["resultado_total"])
+
+    # ── Detalhe do setup selecionado ────────────────────────────────
+    detalhe_setup = None
+    detalhe_ops   = []
+
+    if setup_sel:
+        journals_sel = [j for j in todos_journals
+                        if (j.setup or "").strip() == setup_sel
+                        or (not j.setup and setup_sel == "(sem setup)")]
+        detalhe_setup = _metricas_grupo(journals_sel)
+        if detalhe_setup:
+            detalhe_setup["nome"] = setup_sel
+
+        # Operações individuais do setup selecionado (mais recentes primeiro)
+        for j in sorted(journals_sel,
+                        key=lambda x: x.operacao.abertura, reverse=True):
+            abertura_local = j.operacao.abertura.astimezone(TZ_BR)
+            detalhe_ops.append({
+                "abertura":         abertura_local,
+                "ativo":            j.operacao.ativo,
+                "resultado":        float(j.operacao.resultado_operacao),
+                "is_win":           j.operacao.is_win,
+                "tags_lista":       j.tags_lista(),
+                "emocao":           j.get_emocao_display(),
+                "emocao_slug":      j.emocao,
+                "qualidade_entrada": j.qualidade_entrada,
+                "qualidade_saida":   j.qualidade_saida,
+                "anotacao":         j.anotacao,
+            })
+
+    # ── Setups disponíveis para filtro ──────────────────────────────
+    setups_disponiveis = sorted(
+        {(j.setup.strip() if j.setup and j.setup.strip() else "(sem setup)")
+         for j in todos_journals}
+    )
+
+    # ── Gráficos ────────────────────────────────────────────────────
+    grafico_setup   = _grafico_analise_setup(metricas_setup)
+    grafico_tag     = _grafico_analise_tag(metricas_tag)
+
+    context = {
+        "sem_dados":           False,
+        "data_inicio":         data_inicio,
+        "data_fim":            data_fim,
+        "setup_sel":           setup_sel,
+        "total_com_journal":   total_com_journal,
+        "metricas_setup":      metricas_setup,
+        "metricas_tag":        metricas_tag,
+        "detalhe_setup":       detalhe_setup,
+        "detalhe_ops":         detalhe_ops,
+        "setups_disponiveis":  setups_disponiveis,
+        "grafico_setup":       grafico_setup,
+        "grafico_tag":         grafico_tag,
+    }
+    return render(request, "trades/analise_setup.html", context)
 
 
 def relatorio_mensal(request):

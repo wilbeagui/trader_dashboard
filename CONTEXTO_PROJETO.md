@@ -37,6 +37,7 @@ operacional.
 - Gráfico de Drawdown no Dashboard ← IMPLEMENTADO (Passo 7)
 - Avaliação Relativa no Revenge Trading ← IMPLEMENTADO (Passo 8)
 - Win Rate Contextualizado pela EM ← IMPLEMENTADO (Passo 9)
+- Análise por Setup/Tag ← IMPLEMENTADO (Passo 10)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -86,7 +87,8 @@ trader_dashboard/
 │       ├── importar.html
 │       ├── operacoes.html
 │       ├── journal.html          ← CRIADO (Passo 1)
-│       └── relatorio_mensal.html ← CRIADO (Passo 4)
+│       ├── relatorio_mensal.html ← CRIADO (Passo 4)
+│       └── analise_setup.html    ← CRIADO (Passo 10)
 ├── .env
 ├── .gitignore
 ├── CONTEXTO_PROJETO.md
@@ -236,10 +238,12 @@ Observações do trader sobre o pregão como um todo.
   atualizado_em), list_filter por estado_emocional, ordering por -data_sessao
 - `apps/trades/views.py` → 8 views ativas + helpers de cálculo e gráficos;
   inclui _grafico_drawdown(df) adicionado no Passo 7;
-  _calcular_comportamental() atualizado no Passo 8 com revenge_pct e avaliação relativa
+  _calcular_comportamental() atualizado no Passo 8 com revenge_pct e avaliação relativa;
+  _grafico_analise_setup() e _grafico_analise_tag() adicionados no Passo 10;
+  view analise_setup() adicionada no Passo 10
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
-  /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/
+  /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/, /analise-setup/
 - `apps/trades/services.py` → lógica de importação do CSV do Profitchart;
   mapeamento corrigido no Passo 3: resultado_operacao_pontos ← 'Res. Operação (%)',
   resultado_operacao ← 'Res. Operação'; chamada corrigida na view importar():
@@ -259,7 +263,13 @@ Observações do trader sobre o pregão como um todo.
 - `templates/trades/comportamental.html` → 5 seções de indicadores comportamentais;
   seção Revenge Trading atualizada no Passo 8: card Episódios exibe contagem + %
   relativo; card Avaliação usa revenge_avaliacao/revenge_cor do backend
-- `templates/trades/journal.html` → página dedicada com filtros e métricas por setup
+- `templates/trades/analise_setup.html` → página de análise por setup e tag (Passo 10):
+  filtros de período e setup; resumo geral (4 KPIs); tabela de setups com WR, resultado,
+  gain/loss médio, payoff, EM, qualidade entrada/saída; clique na linha filtra detalhe;
+  detalhe do setup selecionado com 6 KPIs + lista de operações individuais;
+  tabela de tags com mesmas métricas; gráficos de barras horizontais por setup e tag
+- `templates/base.html` → link "Análise por Setup" adicionado no sidebar (Passo 10),
+  após Journal; usa request.resolver_match.url_name para active state
 - `templates/trades/relatorio_mensal.html` → página de relatório mensal: 8 cards de KPI
   do mês selecionado, 2 gráficos Plotly (barras de resultado + linha de win rate),
   tabela histórica comparativa com delta mês a mês colorido (Passo 4)
@@ -324,6 +334,14 @@ Observações do trader sobre o pregão como um todo.
   < 1 (vermelho); fallback para win_rate >= 50 quando não há wins e losses simultâneos;
   kpi-sub contextualiza: "ganhos compensam as perdas" / "payoff insuficiente para o WR" /
   "X W · Y L" (fallback); mesma lógica já aplicada no Dashboard desde o Passo 2
+- Análise por Setup (Passo 10): agrupamento feito em Python (defaultdict) sobre lista
+  única de JournalOperacao.objects.select_related("operacao"); setup vazio agrupado como
+  "(sem setup)" e ordenado por último; _metricas_grupo() helper interno calcula EM,
+  payoff, qualidade média; detalhe do setup via GET param setup=; clique na linha da
+  tabela redireciona para a mesma URL com setup= preenchido; tags_lista() do model
+  usada para explodir tags em grupos separados; gráficos com _grafico_analise_setup()
+  e _grafico_analise_tag() (barras horizontais, até 15 tags); from collections import
+  defaultdict dentro da view (import local, sem poluir o escopo global)
 - Revenge Trading (Passo 8): avaliação relativa via revenge_pct = episódios /
   (total_ops - 1) × 100; limiares: Nenhum (0%), Baixo (< 5%), Moderado (< 15%),
   Alto (≥ 15%); revenge_avaliacao e revenge_cor calculados no backend e passados ao
@@ -417,6 +435,21 @@ Observações do trader sobre o pregão como um todo.
 - Score calculado: resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%);
   régua resultado ±R$500; dias sem losers = nota 5 no componente MEN
 
+### Análise por Setup (adicionado no Passo 10)
+- View analise_setup(): faz UMA única query JournalOperacao.objects.select_related("operacao")
+  e agrupa em memória via defaultdict — NUNCA fazer queries dentro de loop por setup
+- _metricas_grupo(journals_grupo): helper interno à view; calcula EM, payoff, qualidades
+- Setup vazio (j.setup falsy) → agrupado como "(sem setup)"; vai ao fim da ordenação
+- Ordenação: por resultado_total decrescente, sem_setup vai por último
+- Tags: explodir via j.tags_lista() por operação; uma op pode contribuir para N grupos de tag
+- Gráficos: _grafico_analise_setup() e _grafico_analise_tag() (barras horizontais)
+  _grafico_analise_tag() limita a 15 tags (metricas_tag[:15])
+- Detalhe do setup: GET param setup=; clique na linha da tabela navega para mesma URL
+  com setup= preenchido; linha selecionada recebe class="selected" na tabela
+- from collections import defaultdict: import LOCAL dentro da view (não no topo do arquivo)
+- NUNCA usar .annotate() do ORM para calcular EM ou payoff — fazer em Python
+  (ORM não suporta as fórmulas compostas de forma legível)
+
 ### Win Rate Contextualizado pela EM (adicionado no Passo 9)
 - Card Win Rate da página Dia: cor baseada em payoff_ratio_dia, não em win_rate >= 50
 - Lógica: se payoff_ratio_dia is not None → pos se >= 1, neg se < 1
@@ -486,6 +519,7 @@ Observações do trader sobre o pregão como um todo.
 - Score do Dia Calculado → dia(); resultado 40% + WR 20% + MEP 20% + MEN 20%; escala 0–10 (Passo 6)
 - Revenge Trading Relativo → revenge_pct; avaliação por % em vez de contagem absoluta (Passo 8)
 - Win Rate Contextualizado → cor do card Dia baseada em payoff_ratio_dia >= 1 (Passo 9)
+- Análise por Setup/Tag → analise_setup(); EM, payoff, qualidade por setup e tag (Passo 10)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades; avaliação relativa via
@@ -678,19 +712,32 @@ Consistência com o Dashboard, que já usava essa lógica desde o Passo 2.
 
 ---
 
-### PASSO 10 — Análise por Setup/Tag ★★★★☆
-**Objetivo:** agrupar métricas por setup e tag do journal.
-**Depende do Passo 1 (Journal). ✅ Passo 1 concluído.**
+### PASSO 10 — Análise por Setup/Tag ★★★★☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- View `analise_setup()` → `/analise-setup/`: agrupa JournalOperacao em memória via
+  `defaultdict`; calcula por setup e por tag: resultado total, win rate, EM, payoff ratio,
+  gain/loss médio, qualidade média de entrada e saída; detalhe do setup selecionado via
+  GET param `setup=` com lista de operações individuais; filtro de período
+- Helpers `_grafico_analise_setup()` e `_grafico_analise_tag()`: barras horizontais
+  de resultado por setup/tag; tag limitada a 15 itens
+- Rota `/analise-setup/` adicionada ao `urls.py`
+- `analise_setup.html`: filtros (período + setup); 4 KPIs de resumo geral;
+  tabela de setups com WR (barra visual inline), resultado, gain/loss médio, payoff, EM,
+  qualidade entrada/saída; clique na linha → detalhe do setup; detalhe com 6 KPIs +
+  lista de operações (ativo, data, emoção, tags, qualidades, anotação);
+  tabela de tags com mesmas métricas (sem qualidade); gráficos abaixo de cada tabela
+- Link "Análise por Setup" adicionado ao sidebar do `base.html` após Journal
 
-**Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view analise_setup():
-  - JOIN entre Operacao e JournalOperacao
-  - Agrupar por setup: resultado total, win rate, EM, payoff ratio,
-    média de qualidade de entrada/saída, total de operações
-  - Agrupar por tag: mesmas métricas
-- `apps/trades/urls.py` → rota /analise-setup/
-- `templates/trades/analise_setup.html` → tabelas + gráficos por setup e tag
-- `templates/base.html` → link no sidebar
+**Decisões técnicas:**
+- Agrupamento em Python (defaultdict) sobre query única — NUNCA queries em loop
+- Setup vazio → "(sem setup)" → vai ao fim da ordenação
+- Tags: cada op contribui para N grupos via tags_lista()
+- `from collections import defaultdict` como import local dentro da view
+- NUNCA usar .annotate() do ORM para EM/payoff — fazer em Python
+
+**Arquivos alterados/criados:**
+`apps/trades/views.py`, `apps/trades/urls.py`, `templates/base.html`,
+`templates/trades/analise_setup.html` (novo)
 
 ---
 
@@ -801,7 +848,7 @@ Fase 1 — Fundação analítica:
   ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → ~~Passo 7~~ ✅ → ~~Passo 9~~ ✅
 
 Fase 2 — Diferencial competitivo:
-  ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → Passo 10 → Passo 14 → ~~Passo 17~~ ✅
+  ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → ~~Passo 10~~ ✅ → Passo 14 → ~~Passo 17~~ ✅
 
 Fase 3 — Visão de negócio:
   ~~Passo 4~~ ✅ → Passo 12 → Passo 16

@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+
+{% block title %}Análise por Setup · Trader{% endblock %}
+{% block page_title %}Análise por Setup{% endblock %}
+
+{% block topbar_meta %}
+  {% if data_inicio or data_fim %}
+    <i class="bi bi-funnel-fill" style="color:var(--accent-blue);font-size:11px;margin-right:4px;"></i>
+    {{ data_inicio|default:"início" }} → {{ data_fim|default:"hoje" }}
+  {% else %}
+    Todos os períodos
+  {% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── KPI card compacto ── */
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card .kpi-label {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .8px;
+    color: var(--text-muted); margin-bottom: 5px;
+  }
+  .kpi-card .kpi-value {
+    font-family: var(--font-mono); font-size: 20px;
+    font-weight: 700; color: var(--text-primary); line-height: 1.1;
+  }
+  .kpi-card .kpi-sub {
+    font-size: 11px; color: var(--text-muted);
+    margin-top: 3px; font-family: var(--font-mono);
+  }
+  .kpi-card.pos .kpi-value { color: var(--positive); }
+  .kpi-card.neg .kpi-value { color: var(--negative); }
+  .kpi-card.blue .kpi-value { color: var(--accent-blue); }
+  .kpi-card.warn .kpi-value { color: var(--warning); }
+
+  /* ── Tabela de setups ── */
+  .setup-table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); }
+  .setup-table th {
+    color: var(--text-muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .5px;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    text-align: left; white-space: nowrap;
+  }
+  .setup-table td { padding: 9px 12px; color: var(--text-dim); border-bottom: 1px solid var(--border-subtle); }
+  .setup-table tr:last-child td { border-bottom: none; }
+  .setup-table tbody tr:hover td { background: var(--bg-card-hover); cursor: pointer; }
+  .setup-table tr.selected td { background: var(--accent-blue-soft); }
+
+  .val-pos { color: var(--positive); font-weight: 600; }
+  .val-neg { color: var(--negative); font-weight: 600; }
+  .val-warn { color: var(--warning); font-weight: 600; }
+  .val-blue { color: var(--accent-blue); font-weight: 600; }
+
+  /* ── Badge setup ── */
+  .setup-badge {
+    background: var(--positive-soft);
+    color: var(--positive);
+    border: 1px solid rgba(63,182,139,.25);
+    font-size: 11px; padding: 2px 8px;
+    border-radius: 20px; font-weight: 600;
+  }
+  .setup-badge.sem-setup {
+    background: rgba(184,196,206,.07);
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+  .tag-badge {
+    background: rgba(184,196,206,.07);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    font-size: 11px; padding: 2px 7px;
+    border-radius: 20px;
+  }
+
+  /* ── Emoção badges ── */
+  .emocao-calmo     { background: rgba(63,182,139,.1);   color: #3fb68b; border: 1px solid rgba(63,182,139,.2); border-radius: 20px; padding: 2px 8px; font-size: 11px; }
+  .emocao-confiante { background: rgba(56,139,253,.1);   color: #388bfd; border: 1px solid rgba(56,139,253,.2); border-radius: 20px; padding: 2px 8px; font-size: 11px; }
+  .emocao-neutro    { background: rgba(184,196,206,.08); color: #8b949e; border: 1px solid rgba(184,196,206,.15); border-radius: 20px; padding: 2px 8px; font-size: 11px; }
+  .emocao-ansioso   { background: rgba(210,153,34,.1);   color: #d2991e; border: 1px solid rgba(210,153,34,.2); border-radius: 20px; padding: 2px 8px; font-size: 11px; }
+  .emocao-frustrado { background: rgba(224,92,92,.1);    color: #e05c5c; border: 1px solid rgba(224,92,92,.2);  border-radius: 20px; padding: 2px 8px; font-size: 11px; }
+
+  /* ── Detalhe de ops ── */
+  .op-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    transition: border-color .15s;
+  }
+  .op-card:hover { border-color: var(--border-subtle); background: var(--bg-card-hover); }
+
+  /* ── Qual dot ── */
+  .qual-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:3px; }
+  .qual-high { background: var(--positive); }
+  .qual-mid  { background: var(--warning); }
+  .qual-low  { background: var(--negative); }
+
+  /* ── Barra de progresso de win rate ── */
+  .wr-bar-wrap { width: 60px; background: var(--border-subtle); border-radius: 3px; height: 5px; display:inline-block; vertical-align:middle; margin-left:6px; }
+  .wr-bar { height: 5px; border-radius: 3px; }
+
+  /* ── Section title ── */
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .8px; color: var(--text-muted);
+    padding-bottom: 10px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title i { font-size: 14px; }
+
+  .empty-state { text-align:center; padding:40px 16px; color:var(--text-muted); font-size:12px; }
+  .empty-state i { font-size:32px; display:block; margin-bottom:10px; opacity:.4; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Filtros ── -->
+<form method="get">
+  <div class="filter-bar">
+    <div>
+      <label>De</label>
+      <input type="date" name="data_inicio" class="form-control"
+             style="width:150px;" value="{{ data_inicio }}">
+    </div>
+    <div>
+      <label>Até</label>
+      <input type="date" name="data_fim" class="form-control"
+             style="width:150px;" value="{{ data_fim }}">
+    </div>
+    <div>
+      <label>Setup</label>
+      <select name="setup" class="form-control" style="width:180px;">
+        <option value="">— todos —</option>
+        {% for s in setups_disponiveis %}
+          <option value="{{ s }}" {% if setup_sel == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;padding-bottom:0;">
+      <button type="submit" class="btn-filter">
+        <i class="bi bi-funnel"></i> Filtrar
+      </button>
+      <a href="{% url 'trades:analise_setup' %}" class="btn-filter-clear">
+        <i class="bi bi-x"></i> Limpar
+      </a>
+    </div>
+  </div>
+</form>
+
+{% if sem_dados %}
+  <div class="empty-state" style="padding:80px;">
+    <i class="bi bi-journal-x" style="font-size:48px;opacity:.3;"></i>
+    <p style="font-size:14px;margin-bottom:8px;">Nenhuma operação com journal encontrada.</p>
+    <p style="font-size:12px;">Adicione anotações na página
+      <a href="{% url 'trades:operacoes' %}" style="color:var(--positive);">Operações</a>
+      para usar esta análise.
+    </p>
+  </div>
+
+{% else %}
+
+<!-- ══ RESUMO GERAL ══ -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Ops com Journal</div>
+      <div class="kpi-value">{{ total_com_journal }}</div>
+      <div class="kpi-sub">operações anotadas</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Setups Distintos</div>
+      <div class="kpi-value">{{ metricas_setup|length }}</div>
+      <div class="kpi-sub">estratégias registradas</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Tags Distintas</div>
+      <div class="kpi-value">{{ metricas_tag|length }}</div>
+      <div class="kpi-sub">etiquetas registradas</div>
+    </div>
+  </div>
+  {% with melhor=metricas_setup|first %}
+  {% if melhor and not melhor.sem_setup %}
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card {% if melhor.resultado_total >= 0 %}pos{% else %}neg{% endif %}">
+      <div class="kpi-label">Melhor Setup</div>
+      <div class="kpi-value" style="font-size:16px;">{{ melhor.nome }}</div>
+      <div class="kpi-sub">R$ {{ melhor.resultado_total|floatformat:2 }}</div>
+    </div>
+  </div>
+  {% endif %}
+  {% endwith %}
+</div>
+
+
+<!-- ══ TABELA DE SETUPS ══ -->
+<div class="chart-card mb-4">
+  <div class="section-title">
+    <i class="bi bi-bar-chart-steps"></i> Performance por Setup
+    <span style="font-weight:400;color:var(--text-muted);font-size:10px;margin-left:auto;">
+      Clique em uma linha para ver o detalhe
+    </span>
+  </div>
+
+  {% if metricas_setup %}
+  <div style="overflow-x:auto;">
+    <table class="setup-table">
+      <thead>
+        <tr>
+          <th>Setup</th>
+          <th style="text-align:right;">Ops</th>
+          <th style="text-align:right;">Win Rate</th>
+          <th style="text-align:right;">Resultado Total</th>
+          <th style="text-align:right;">Média / Op</th>
+          <th style="text-align:right;">Gain Médio</th>
+          <th style="text-align:right;">Loss Médio</th>
+          <th style="text-align:right;">Payoff</th>
+          <th style="text-align:right;">EM</th>
+          <th style="text-align:center;">Ent.</th>
+          <th style="text-align:center;">Saída</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in metricas_setup %}
+        <tr class="{% if setup_sel == m.nome %}selected{% endif %}"
+            onclick="window.location='{% url 'trades:analise_setup' %}?data_inicio={{ data_inicio }}&data_fim={{ data_fim }}&setup={{ m.nome }}'">
+          <td>
+            <span class="setup-badge {% if m.sem_setup %}sem-setup{% endif %}">
+              {{ m.nome }}
+            </span>
+          </td>
+          <td style="text-align:right;">{{ m.total }}</td>
+          <td style="text-align:right;">
+            <span class="{% if m.win_rate >= 50 %}val-pos{% else %}val-neg{% endif %}">
+              {{ m.win_rate }}%
+            </span>
+            <span class="wr-bar-wrap">
+              <span class="wr-bar" style="width:{{ m.win_rate }}%;background:{% if m.win_rate >= 50 %}var(--positive){% else %}var(--negative){% endif %};"></span>
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <span class="{% if m.resultado_total >= 0 %}val-pos{% else %}val-neg{% endif %}">
+              {% if m.resultado_total >= 0 %}+{% endif %}R$ {{ m.resultado_total|floatformat:2 }}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <span class="{% if m.media_resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+              {% if m.media_resultado >= 0 %}+{% endif %}R$ {{ m.media_resultado|floatformat:2 }}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            {% if m.gain_medio is not None %}
+              <span class="val-pos">+R$ {{ m.gain_medio|floatformat:2 }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if m.loss_medio is not None %}
+              <span class="val-neg">R$ {{ m.loss_medio|floatformat:2 }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if m.payoff is not None %}
+              <span class="{% if m.payoff >= 1 %}val-pos{% else %}val-neg{% endif %}">
+                {{ m.payoff|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if m.em is not None %}
+              <span class="{% if m.em >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m.em >= 0 %}+{% endif %}R$ {{ m.em|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if m.q_entrada_media is not None %}
+              <span class="qual-dot {% if m.q_entrada_media >= 7 %}qual-high{% elif m.q_entrada_media >= 4 %}qual-mid{% else %}qual-low{% endif %}"></span>
+              {{ m.q_entrada_media }}
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:center;">
+            {% if m.q_saida_media is not None %}
+              <span class="qual-dot {% if m.q_saida_media >= 7 %}qual-high{% elif m.q_saida_media >= 4 %}qual-mid{% else %}qual-low{% endif %}"></span>
+              {{ m.q_saida_media }}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if grafico_setup %}
+    <hr style="border-color:var(--border-subtle);margin:20px 0 16px;">
+    {{ grafico_setup|safe }}
+  {% endif %}
+
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-journal-x"></i>
+    Nenhuma operação com setup anotado no período.
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ══ DETALHE DO SETUP SELECIONADO ══ -->
+{% if setup_sel and detalhe_setup %}
+<div class="chart-card mb-4">
+  <div class="section-title">
+    <i class="bi bi-zoom-in"></i>
+    Detalhe — <span class="setup-badge" style="margin-left:4px;">{{ setup_sel }}</span>
+  </div>
+
+  <!-- KPIs do setup -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-xl-2">
+      <div class="kpi-card blue">
+        <div class="kpi-label">Operações</div>
+        <div class="kpi-value">{{ detalhe_setup.total }}</div>
+        <div class="kpi-sub">{{ detalhe_setup.n_wins }}W · {{ detalhe_setup.n_losses }}L</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-2">
+      <div class="kpi-card {% if detalhe_setup.win_rate >= 50 %}pos{% else %}neg{% endif %}">
+        <div class="kpi-label">Win Rate</div>
+        <div class="kpi-value">{{ detalhe_setup.win_rate }}%</div>
+        <div class="kpi-sub">acertos no setup</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-2">
+      <div class="kpi-card {% if detalhe_setup.resultado_total >= 0 %}pos{% else %}neg{% endif %}">
+        <div class="kpi-label">Resultado Total</div>
+        <div class="kpi-value" style="font-size:17px;">
+          {% if detalhe_setup.resultado_total >= 0 %}+{% endif %}R$ {{ detalhe_setup.resultado_total|floatformat:2 }}
+        </div>
+        <div class="kpi-sub">acumulado</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-2">
+      <div class="kpi-card {% if detalhe_setup.payoff is not None %}{% if detalhe_setup.payoff >= 1 %}pos{% else %}neg{% endif %}{% else %}blue{% endif %}">
+        <div class="kpi-label">Payoff Ratio</div>
+        <div class="kpi-value">
+          {% if detalhe_setup.payoff is not None %}{{ detalhe_setup.payoff|floatformat:2 }}{% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">gain ÷ |loss| médio</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-2">
+      <div class="kpi-card {% if detalhe_setup.em is not None %}{% if detalhe_setup.em >= 0 %}pos{% else %}neg{% endif %}{% else %}blue{% endif %}">
+        <div class="kpi-label">Expect. Matemática</div>
+        <div class="kpi-value" style="font-size:17px;">
+          {% if detalhe_setup.em is not None %}
+            {% if detalhe_setup.em >= 0 %}+{% endif %}R$ {{ detalhe_setup.em|floatformat:2 }}
+          {% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">por operação</div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-2">
+      <div class="kpi-card blue">
+        <div class="kpi-label">Qualidade Entrada</div>
+        <div class="kpi-value">
+          {% if detalhe_setup.q_entrada_media is not None %}{{ detalhe_setup.q_entrada_media }}/10{% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">
+          saída:
+          {% if detalhe_setup.q_saida_media is not None %}{{ detalhe_setup.q_saida_media }}/10{% else %}—{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lista de operações do setup -->
+  {% if detalhe_ops %}
+  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-bottom:10px;">
+    Operações ({{ detalhe_ops|length }})
+  </div>
+  {% for op in detalhe_ops %}
+  <div class="op-card">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-family:var(--font-mono);font-weight:700;color:var(--text-primary);font-size:13px;">
+        {{ op.ativo }}
+      </span>
+      <span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">
+        {{ op.abertura|date:"d/m/Y H:i" }}
+      </span>
+      {% if op.emocao_slug %}
+        <span class="emocao-{{ op.emocao_slug }}">{{ op.emocao }}</span>
+      {% endif %}
+      {% for tag in op.tags_lista %}
+        <span class="tag-badge">#{{ tag }}</span>
+      {% endfor %}
+      <span style="margin-left:auto;font-family:var(--font-mono);font-weight:700;
+        color:{% if op.is_win %}var(--positive){% else %}var(--negative){% endif %};">
+        {% if op.is_win %}+{% endif %}R$ {{ op.resultado|floatformat:2 }}
+      </span>
+    </div>
+    {% if op.qualidade_entrada or op.qualidade_saida %}
+    <div style="margin-top:6px;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">
+      {% if op.qualidade_entrada %}
+        Entrada:
+        <span class="qual-dot {% if op.qualidade_entrada >= 7 %}qual-high{% elif op.qualidade_entrada >= 4 %}qual-mid{% else %}qual-low{% endif %}"></span>
+        <span style="color:var(--text-dim);">{{ op.qualidade_entrada }}/10</span>
+      {% endif %}
+      {% if op.qualidade_saida %}
+        &nbsp;·&nbsp; Saída:
+        <span class="qual-dot {% if op.qualidade_saida >= 7 %}qual-high{% elif op.qualidade_saida >= 4 %}qual-mid{% else %}qual-low{% endif %}"></span>
+        <span style="color:var(--text-dim);">{{ op.qualidade_saida }}/10</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if op.anotacao %}
+    <div style="margin-top:6px;font-size:12px;color:var(--text-muted);border-left:2px solid var(--border);padding-left:10px;line-height:1.5;">
+      {{ op.anotacao }}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endif %}
+
+
+<!-- ══ ANÁLISE POR TAG ══ -->
+{% if metricas_tag %}
+<div class="chart-card mb-4">
+  <div class="section-title">
+    <i class="bi bi-tags"></i> Performance por Tag
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="setup-table">
+      <thead>
+        <tr>
+          <th>Tag</th>
+          <th style="text-align:right;">Ops</th>
+          <th style="text-align:right;">Win Rate</th>
+          <th style="text-align:right;">Resultado Total</th>
+          <th style="text-align:right;">Média / Op</th>
+          <th style="text-align:right;">Payoff</th>
+          <th style="text-align:right;">EM</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in metricas_tag %}
+        <tr>
+          <td><span class="tag-badge">#{{ m.nome }}</span></td>
+          <td style="text-align:right;">{{ m.total }}</td>
+          <td style="text-align:right;">
+            <span class="{% if m.win_rate >= 50 %}val-pos{% else %}val-neg{% endif %}">
+              {{ m.win_rate }}%
+            </span>
+            <span class="wr-bar-wrap">
+              <span class="wr-bar" style="width:{{ m.win_rate }}%;background:{% if m.win_rate >= 50 %}var(--positive){% else %}var(--negative){% endif %};"></span>
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <span class="{% if m.resultado_total >= 0 %}val-pos{% else %}val-neg{% endif %}">
+              {% if m.resultado_total >= 0 %}+{% endif %}R$ {{ m.resultado_total|floatformat:2 }}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <span class="{% if m.media_resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+              {% if m.media_resultado >= 0 %}+{% endif %}R$ {{ m.media_resultado|floatformat:2 }}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            {% if m.payoff is not None %}
+              <span class="{% if m.payoff >= 1 %}val-pos{% else %}val-neg{% endif %}">{{ m.payoff|floatformat:2 }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if m.em is not None %}
+              <span class="{% if m.em >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m.em >= 0 %}+{% endif %}R$ {{ m.em|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if grafico_tag %}
+    <hr style="border-color:var(--border-subtle);margin:20px 0 16px;">
+    {{ grafico_tag|safe }}
+  {% endif %}
+</div>
+{% endif %}
+
+{% endif %}{# fim sem_dados #}
+{% endblock %}
