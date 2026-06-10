@@ -38,6 +38,7 @@ operacional.
 - Avaliação Relativa no Revenge Trading ← IMPLEMENTADO (Passo 8)
 - Win Rate Contextualizado pela EM ← IMPLEMENTADO (Passo 9)
 - Análise por Setup/Tag ← IMPLEMENTADO (Passo 10)
+- Correlação Overtrading × Revenge ← IMPLEMENTADO (Passo 11)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -239,6 +240,8 @@ Observações do trader sobre o pregão como um todo.
 - `apps/trades/views.py` → 8 views ativas + helpers de cálculo e gráficos;
   inclui _grafico_drawdown(df) adicionado no Passo 7;
   _calcular_comportamental() atualizado no Passo 8 com revenge_pct e avaliação relativa;
+  _calcular_comportamental() atualizado no Passo 11 com correlação Pearson
+  overtrading × revenge e % de revenge em dias normais vs dias de overtrading;
   _grafico_analise_setup() e _grafico_analise_tag() adicionados no Passo 10;
   view analise_setup() adicionada no Passo 10
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
@@ -262,7 +265,10 @@ Observações do trader sobre o pregão como um todo.
   coluna Pts na tabela; coluna Journal com botão por linha; offcanvas drawer Bootstrap
 - `templates/trades/comportamental.html` → 5 seções de indicadores comportamentais;
   seção Revenge Trading atualizada no Passo 8: card Episódios exibe contagem + %
-  relativo; card Avaliação usa revenge_avaliacao/revenge_cor do backend
+  relativo; card Avaliação usa revenge_avaliacao/revenge_cor do backend;
+  seção "Correlação Overtrading × Revenge" adicionada no Passo 11 (seção 2b):
+  3 KPIs (Pearson, % revenge dias normais, % revenge dias overtrading) +
+  bloco de interpretação textual automática gerado no backend
 - `templates/trades/analise_setup.html` → página de análise por setup e tag (Passo 10):
   filtros de período e setup; resumo geral (4 KPIs); tabela de setups com WR, resultado,
   gain/loss médio, payoff, EM, qualidade entrada/saída; clique na linha filtra detalhe;
@@ -334,7 +340,14 @@ Observações do trader sobre o pregão como um todo.
   < 1 (vermelho); fallback para win_rate >= 50 quando não há wins e losses simultâneos;
   kpi-sub contextualiza: "ganhos compensam as perdas" / "payoff insuficiente para o WR" /
   "X W · Y L" (fallback); mesma lógica já aplicada no Dashboard desde o Passo 2
-- Análise por Setup (Passo 10): agrupamento feito em Python (defaultdict) sobre lista
+- Correlação Overtrading × Revenge (Passo 11): calculada via pandas .corr() (Pearson)
+  entre total_ops e n_revenge por dia; n_revenge por dia reconstruído iterando o df
+  já ordenado (mesma lógica do loop de revenge_ops, mas com pd.Series de flags);
+  mínimo 3 dias para calcular — abaixo disso retorna None; limiares de interpretação:
+  >= 0.5 forte, >= 0.2 moderada, >= -0.2 fraca, < -0.2 negativa; % revenge em dias
+  normais vs overtrading calculado com .groupby já existente (ops_por_dia enriquecido);
+  interpretação textual automática gerada no backend (corr_interpretacao) e exibida
+  no template sem lógica complexa no HTML
   única de JournalOperacao.objects.select_related("operacao"); setup vazio agrupado como
   "(sem setup)" e ordenado por último; _metricas_grupo() helper interno calcula EM,
   payoff, qualidade média; detalhe do setup via GET param setup=; clique na linha da
@@ -435,6 +448,18 @@ Observações do trader sobre o pregão como um todo.
 - Score calculado: resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%);
   régua resultado ±R$500; dias sem losers = nota 5 no componente MEN
 
+### Correlação Overtrading × Revenge (adicionado no Passo 11)
+- Calculada em _calcular_comportamental() sobre ops_por_dia enriquecido com n_revenge
+- n_revenge por dia: pd.Series de flags (df["is_revenge"]) → groupby("data_dia").sum()
+- Requer mínimo 3 dias; abaixo disso corr_overtrade_revenge = None
+- Usar pandas .corr() (Pearson); proteger contra NaN com verificação explícita
+- corr_interpretacao: string gerada no backend; NUNCA recalcular interpretação no template
+- Quatro chaves obrigatórias no return: corr_overtrade_revenge, corr_interpretacao,
+  revenge_pct_dias_normais, revenge_pct_dias_overtrade
+- ops_por_dia deve ser enriquecido com n_revenge ANTES de ser passado aos gráficos
+  (o join é feito após o groupby de overtrading, sem reconstruir o df)
+- df["data_dia"] pode já existir no df — a reatribuição é inócua (mesmo valor)
+
 ### Análise por Setup (adicionado no Passo 10)
 - View analise_setup(): faz UMA única query JournalOperacao.objects.select_related("operacao")
   e agrupa em memória via defaultdict — NUNCA fazer queries dentro de loop por setup
@@ -520,6 +545,7 @@ Observações do trader sobre o pregão como um todo.
 - Revenge Trading Relativo → revenge_pct; avaliação por % em vez de contagem absoluta (Passo 8)
 - Win Rate Contextualizado → cor do card Dia baseada em payoff_ratio_dia >= 1 (Passo 9)
 - Análise por Setup/Tag → analise_setup(); EM, payoff, qualidade por setup e tag (Passo 10)
+- Correlação Overtrading × Revenge → Pearson por dia; % revenge em dias normais vs overtrade (Passo 11)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades; avaliação relativa via
@@ -741,14 +767,28 @@ Consistência com o Dashboard, que já usava essa lógica desde o Passo 2.
 
 ---
 
-### PASSO 11 — Correlação Overtrading × Revenge ★★★☆☆
-**Objetivo:** seção de correlação cruzada entre indicadores comportamentais.
+### PASSO 11 — Correlação Overtrading × Revenge ★★★☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- `_calcular_comportamental()` em `views.py`:
+  - Reconstrói flags de revenge por operação (pd.Series `is_revenge`) com a mesma
+    lógica do loop de `revenge_ops`, sem duplicar código de detecção
+  - Enriquece `ops_por_dia` com `n_revenge` (count por dia) e `tem_revenge` (bool)
+    via `.join()` — sem nova query ao banco
+  - Correlação de Pearson entre `total_ops` e `n_revenge` via pandas `.corr()`;
+    guarda em `corr_overtrade_revenge`; requer mínimo 3 dias (abaixo → None)
+  - `corr_interpretacao`: string gerada no backend com 4 faixas
+    (>= 0.5 forte / >= 0.2 moderada / >= -0.2 fraca / < -0.2 negativa)
+  - `revenge_pct_dias_normais` e `revenge_pct_dias_overtrade`: % de dias com
+    pelo menos 1 episódio de revenge, separados por dias dentro/fora do limiar
+  - 4 novas chaves no return da função
+- `comportamental.html` — nova seção "2b. Correlação Overtrading × Revenge":
+  - 3 KPIs: Correlação Pearson (cor por faixa), % revenge dias normais, % revenge
+    dias overtrading
+  - Bloco de interpretação textual automática: exibe `corr_interpretacao` +
+    comparativo dos percentuais com frase conclusiva gerada por template tag
 
-**Arquivos a alterar:**
-- `apps/trades/views.py` → _calcular_comportamental():
-  - Correlação de Pearson entre qtd_ops_dia e n_revenge_dia
-  - Retornar: corr_overtrade_revenge, revenge_pct_dias_normais, revenge_pct_dias_overtrade
-- `templates/trades/comportamental.html` → nova seção com interpretação textual automática
+**Arquivos alterados:** `apps/trades/views.py`, `templates/trades/comportamental.html`
+**Sem migração de banco. Sem nova URL.**
 
 ---
 
@@ -854,7 +894,7 @@ Fase 3 — Visão de negócio:
   ~~Passo 4~~ ✅ → Passo 12 → Passo 16
 
 Fase 4 — Refinamentos comportamentais:
-  ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → Passo 11 → Passo 13 → Passo 15
+  ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → Passo 13 → Passo 15
 
 Fase 5 — Infraestrutura para comercialização:
   Passo 18 → Passo 19 → Passo 20

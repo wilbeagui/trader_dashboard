@@ -420,6 +420,134 @@
 
 
 <!-- ══════════════════════════════════════════════════════
+     2b. CORRELAÇÃO OVERTRADING × REVENGE
+══════════════════════════════════════════════════════ -->
+<div class="chart-card mb-3">
+  <div class="section-header">
+    <div class="section-icon" style="background:rgba(227,179,65,.1);color:var(--warning);">
+      <i class="bi bi-diagram-3"></i>
+    </div>
+    <div>
+      <div class="section-title">Correlação Overtrading × Revenge Trading</div>
+      <div class="section-sub">Relação entre excesso de operações e impulsividade nos dias de pregão</div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+
+    <!-- Correlação de Pearson -->
+    <div class="col-12 col-xl-4">
+      <div class="kpi-card
+        {% if corr_overtrade_revenge is None %}blue
+        {% elif corr_overtrade_revenge >= 0.5 %}neg
+        {% elif corr_overtrade_revenge >= 0.2 %}warn
+        {% else %}pos{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-graph-up"></i></div>
+        <div class="kpi-label">Correlação (Pearson)</div>
+        <div class="kpi-value">
+          {% if corr_overtrade_revenge is not None %}
+            {{ corr_overtrade_revenge|floatformat:2 }}
+          {% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">{{ corr_interpretacao }}</div>
+      </div>
+    </div>
+
+    <!-- % Revenge em dias normais -->
+    <div class="col-6 col-xl-4">
+      <div class="kpi-card
+        {% if revenge_pct_dias_normais is None %}blue
+        {% elif revenge_pct_dias_normais <= 20 %}pos
+        {% elif revenge_pct_dias_normais <= 50 %}warn
+        {% else %}neg{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-calendar-check"></i></div>
+        <div class="kpi-label">Revenge em Dias Normais</div>
+        <div class="kpi-value">
+          {% if revenge_pct_dias_normais is not None %}
+            {{ revenge_pct_dias_normais|floatformat:1 }}%
+          {% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">dos dias dentro do limite</div>
+      </div>
+    </div>
+
+    <!-- % Revenge em dias de overtrading -->
+    <div class="col-6 col-xl-4">
+      <div class="kpi-card
+        {% if revenge_pct_dias_overtrade is None %}blue
+        {% elif revenge_pct_dias_overtrade <= 20 %}pos
+        {% elif revenge_pct_dias_overtrade <= 50 %}warn
+        {% else %}neg{% endif %}">
+        <div class="kpi-icon"><i class="bi bi-lightning-charge"></i></div>
+        <div class="kpi-label">Revenge em Overtrading</div>
+        <div class="kpi-value">
+          {% if revenge_pct_dias_overtrade is not None %}
+            {{ revenge_pct_dias_overtrade|floatformat:1 }}%
+          {% else %}—{% endif %}
+        </div>
+        <div class="kpi-sub">dos dias acima do limite</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Interpretação textual automática -->
+  <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12px;color:var(--text-dim);line-height:1.7;font-family:var(--font-mono);">
+    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);display:block;margin-bottom:8px;">
+      <i class="bi bi-lightbulb" style="margin-right:4px;"></i>Interpretação
+    </span>
+
+    {% if corr_overtrade_revenge is None %}
+      São necessários pelo menos 3 dias de pregão para calcular a correlação.
+
+    {% elif corr_overtrade_revenge >= 0.5 %}
+      <span style="color:var(--negative);">Correlação forte ({{ corr_overtrade_revenge|floatformat:2 }}).</span>
+      Nos dias em que você opera mais do que o planejado, a chance de cair em revenge trading aumenta significativamente.
+      Considere reduzir o número máximo de operações diárias como medida preventiva.
+
+    {% elif corr_overtrade_revenge >= 0.2 %}
+      <span style="color:var(--warning);">Correlação moderada ({{ corr_overtrade_revenge|floatformat:2 }}).</span>
+      Existe alguma tendência de que dias com mais operações coincidam com episódios de revenge.
+      Fique atento quando perceber que o volume está subindo — pode ser sinal de deterioração emocional.
+
+    {% elif corr_overtrade_revenge >= -0.2 %}
+      <span style="color:var(--positive);">Correlação fraca ({{ corr_overtrade_revenge|floatformat:2 }}).</span>
+      Overtrading e revenge trading ocorrem de forma relativamente independente no seu histórico.
+      Os dois precisam de atenção separada, pois um não está sendo gatilho direto do outro.
+
+    {% else %}
+      <span style="color:var(--positive);">Correlação negativa ({{ corr_overtrade_revenge|floatformat:2 }}).</span>
+      Curiosamente, os dias com mais operações não concentram os episódios de revenge.
+      Isso pode indicar que o revenge ocorre em dias de baixo volume, talvez após losses isolados.
+    {% endif %}
+
+    {% if revenge_pct_dias_normais is not None and revenge_pct_dias_overtrade is not None %}
+      <br><br>
+      Dias <strong style="color:var(--text-primary);">dentro do limite</strong>: revenge em
+      <span class="{% if revenge_pct_dias_normais <= 20 %}val-pos{% elif revenge_pct_dias_normais <= 50 %}val-warn{% else %}val-neg{% endif %}">
+        {{ revenge_pct_dias_normais|floatformat:1 }}%
+      </span> dos dias.
+      Dias em <strong style="color:var(--text-primary);">overtrading</strong>: revenge em
+      <span class="{% if revenge_pct_dias_overtrade <= 20 %}val-pos{% elif revenge_pct_dias_overtrade <= 50 %}val-warn{% else %}val-neg{% endif %}">
+        {{ revenge_pct_dias_overtrade|floatformat:1 }}%
+      </span> dos dias.
+
+      {% if revenge_pct_dias_overtrade is not None and revenge_pct_dias_normais is not None %}
+        {% if revenge_pct_dias_overtrade > revenge_pct_dias_normais %}
+          <br>Nos dias de overtrading o revenge é mais frequente — padrão consistente com a correlação encontrada.
+        {% elif revenge_pct_dias_overtrade < revenge_pct_dias_normais %}
+          <br>O revenge ocorre mais em dias de volume normal — o excesso de operações parece não ser o gatilho principal.
+        {% else %}
+          <br>A frequência de revenge é igual nos dois tipos de dia.
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
      3. APROVEITAMENTO DO MEP
 ══════════════════════════════════════════════════════ -->
 <div class="chart-card mb-3">

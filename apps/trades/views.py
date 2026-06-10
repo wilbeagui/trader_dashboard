@@ -453,6 +453,73 @@ def _calcular_comportamental(df: pd.DataFrame, params: ParametrosTrader) -> dict
             else:
                 break
 
+    # ── 6. Correlação Overtrading × Revenge ───────────────────────
+    # Para cada dia, conta quantos episódios de revenge ocorreram
+    revenge_por_dia: dict = {}
+    for r_op in revenge_ops:
+        # abertura está em formato "dd/mm HH:MM" — precisamos só da data
+        # mas como já agrupamos ops_por_dia por data, reconstruímos do df
+        pass
+
+    # Reconstrói contagem de revenge por dia a partir do df já ordenado
+    df_revenge_flags = pd.Series([False] * len(df), index=df.index)
+    for i in range(1, len(df)):
+        op_anterior = df.iloc[i - 1]
+        op_atual = df.iloc[i]
+        if op_anterior["resultado_operacao"] >= 0:
+            continue
+        diff_min = (op_atual["abertura"] -
+                    op_anterior["abertura"]).total_seconds() / 60
+        if diff_min < limiar_min:
+            df_revenge_flags.iloc[i] = True
+
+    df["is_revenge"] = df_revenge_flags
+    df["data_dia"] = df["abertura"].dt.date  # pode já existir — sem problema
+
+    revenge_count_dia = df.groupby(
+        "data_dia")["is_revenge"].sum().rename("n_revenge")
+    ops_por_dia = ops_por_dia.join(
+        revenge_count_dia, on="data_dia", how="left")
+    ops_por_dia["n_revenge"] = ops_por_dia["n_revenge"].fillna(0).astype(int)
+    ops_por_dia["tem_revenge"] = ops_por_dia["n_revenge"] > 0
+
+    # Correlação de Pearson entre qtd_ops e n_revenge (mínimo 3 dias)
+    corr_overtrade_revenge = None
+    if len(ops_por_dia) >= 3:
+        try:
+            corr_val = float(ops_por_dia["total_ops"].corr(
+                ops_por_dia["n_revenge"]))
+            if not (corr_val != corr_val):  # nan check
+                corr_overtrade_revenge = round(corr_val, 3)
+        except Exception:
+            pass
+
+    # % de dias NORMAIS (sem overtrading) que tiveram revenge
+    dias_normais = ops_por_dia[ops_por_dia["total_ops"] <= limiar_ops]
+    dias_overtrade = ops_por_dia[ops_por_dia["total_ops"] > limiar_ops]
+
+    revenge_pct_dias_normais = (
+        round(dias_normais["tem_revenge"].sum() / len(dias_normais) * 100, 1)
+        if len(dias_normais) > 0 else None
+    )
+    revenge_pct_dias_overtrade = (
+        round(dias_overtrade["tem_revenge"].sum() /
+              len(dias_overtrade) * 100, 1)
+        if len(dias_overtrade) > 0 else None
+    )
+
+    # Interpretação da correlação
+    if corr_overtrade_revenge is None:
+        corr_interpretacao = "dados insuficientes"
+    elif corr_overtrade_revenge >= 0.5:
+        corr_interpretacao = "forte — overtrading eleva o risco de revenge"
+    elif corr_overtrade_revenge >= 0.2:
+        corr_interpretacao = "moderada — alguma relação entre volume e impulsividade"
+    elif corr_overtrade_revenge >= -0.2:
+        corr_interpretacao = "fraca — comportamentos pouco relacionados"
+    else:
+        corr_interpretacao = "negativa — sem relação direta"
+
     # ── Gráfico Overtrading: ops/dia × barra de resultado ──────────
     grafico_overtrading = _grafico_overtrading(
         ot_datas, ot_ops, ot_resultados, limiar_ops
@@ -483,6 +550,11 @@ def _calcular_comportamental(df: pd.DataFrame, params: ParametrosTrader) -> dict
             ["data_str", "total_ops", "resultado_dia"]
         ].to_dict("records"),
         "grafico_overtrading": grafico_overtrading,
+        # 6. Correlação Overtrading × Revenge
+        "corr_overtrade_revenge":       corr_overtrade_revenge,
+        "corr_interpretacao":           corr_interpretacao,
+        "revenge_pct_dias_normais":     revenge_pct_dias_normais,
+        "revenge_pct_dias_overtrade":   revenge_pct_dias_overtrade,
         # 3. MEP
         "aprov_medio":        aprov_medio,
         "pior_aprov_lista":   pior_aprov_lista,
@@ -883,10 +955,10 @@ def _grafico_analise_setup(metricas: list) -> str:
     if not dados:
         return ""
 
-    nomes     = [m["nome"]           for m in dados]
+    nomes = [m["nome"] for m in dados]
     resultados = [m["resultado_total"] for m in dados]
-    win_rates  = [m["win_rate"]        for m in dados]
-    cores      = [COR_POSITIVO if r >= 0 else COR_NEGATIVO for r in resultados]
+    win_rates = [m["win_rate"] for m in dados]
+    cores = [COR_POSITIVO if r >= 0 else COR_NEGATIVO for r in resultados]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -916,9 +988,9 @@ def _grafico_analise_tag(metricas: list) -> str:
     if not dados:
         return ""
 
-    nomes      = [m["nome"]           for m in dados]
+    nomes = [m["nome"] for m in dados]
     resultados = [m["resultado_total"] for m in dados]
-    cores      = [COR_POSITIVO if r >= 0 else COR_NEGATIVO for r in resultados]
+    cores = [COR_POSITIVO if r >= 0 else COR_NEGATIVO for r in resultados]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -1608,8 +1680,8 @@ def analise_setup(request):
     from django.db.models import Avg, Count, Sum
 
     data_inicio = request.GET.get("data_inicio", "").strip()
-    data_fim    = request.GET.get("data_fim",    "").strip()
-    setup_sel   = request.GET.get("setup",       "").strip()
+    data_fim = request.GET.get("data_fim",    "").strip()
+    setup_sel = request.GET.get("setup",       "").strip()
 
     # ── Base: operações que têm journal ─────────────────────────────
     qs = JournalOperacao.objects.select_related("operacao").all()
@@ -1634,35 +1706,36 @@ def analise_setup(request):
 
     def _metricas_grupo(journals_grupo):
         """Calcula métricas completas de uma lista de JournalOperacao."""
-        resultados = [float(j.operacao.resultado_operacao) for j in journals_grupo]
-        total      = len(resultados)
+        resultados = [float(j.operacao.resultado_operacao)
+                      for j in journals_grupo]
+        total = len(resultados)
         if total == 0:
             return None
 
-        wins   = [r for r in resultados if r > 0]
+        wins = [r for r in resultados if r > 0]
         losses = [r for r in resultados if r <= 0]
-        n_wins   = len(wins)
+        n_wins = len(wins)
         n_losses = len(losses)
 
-        win_rate     = (n_wins / total * 100) if total else 0.0
+        win_rate = (n_wins / total * 100) if total else 0.0
         resultado_total = sum(resultados)
         media_resultado = resultado_total / total
 
-        gain_medio = (sum(wins)   / n_wins)   if n_wins   else None
+        gain_medio = (sum(wins) / n_wins) if n_wins else None
         loss_medio = (sum(losses) / n_losses) if n_losses else None
 
         if gain_medio is not None and loss_medio is not None:
             payoff = round(gain_medio / abs(loss_medio), 2)
-            em     = round((win_rate / 100 * gain_medio) +
-                           ((1 - win_rate / 100) * loss_medio), 2)
+            em = round((win_rate / 100 * gain_medio) +
+                       ((1 - win_rate / 100) * loss_medio), 2)
         else:
             payoff = None
-            em     = None
+            em = None
 
         q_entradas = [j.qualidade_entrada for j in journals_grupo
                       if j.qualidade_entrada is not None]
-        q_saidas   = [j.qualidade_saida   for j in journals_grupo
-                      if j.qualidade_saida   is not None]
+        q_saidas = [j.qualidade_saida for j in journals_grupo
+                    if j.qualidade_saida is not None]
 
         return {
             "total":            total,
@@ -1676,13 +1749,13 @@ def analise_setup(request):
             "payoff":           payoff,
             "em":               em,
             "q_entrada_media":  round(sum(q_entradas) / len(q_entradas), 1) if q_entradas else None,
-            "q_saida_media":    round(sum(q_saidas)   / len(q_saidas),   1) if q_saidas   else None,
+            "q_saida_media":    round(sum(q_saidas) / len(q_saidas),   1) if q_saidas else None,
         }
 
     # Agrupamento por setup
     from collections import defaultdict
     grupos_setup = defaultdict(list)
-    grupos_tag   = defaultdict(list)
+    grupos_tag = defaultdict(list)
 
     for j in todos_journals:
         chave = j.setup.strip() if j.setup and j.setup.strip() else "(sem setup)"
@@ -1715,7 +1788,7 @@ def analise_setup(request):
 
     # ── Detalhe do setup selecionado ────────────────────────────────
     detalhe_setup = None
-    detalhe_ops   = []
+    detalhe_ops = []
 
     if setup_sel:
         journals_sel = [j for j in todos_journals
@@ -1749,8 +1822,8 @@ def analise_setup(request):
     )
 
     # ── Gráficos ────────────────────────────────────────────────────
-    grafico_setup   = _grafico_analise_setup(metricas_setup)
-    grafico_tag     = _grafico_analise_tag(metricas_tag)
+    grafico_setup = _grafico_analise_setup(metricas_setup)
+    grafico_tag = _grafico_analise_tag(metricas_tag)
 
     context = {
         "sem_dados":           False,
