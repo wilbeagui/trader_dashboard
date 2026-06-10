@@ -454,6 +454,10 @@
       <i class="bi bi-bar-chart-steps"></i> Análise por Setup
     </a>
 
+    <a href="{% url 'trades:comparativo' %}" class="nav-link {% if request.resolver_match.url_name == 'comparativo' %}active{% endif %}">
+      <i class="bi bi-layout-split"></i> Comparativo
+    </a>
+
     <li class="nav-item">
       <a class="nav-link {% if request.resolver_match.url_name == 'relatorio_mensal' %}active{% endif %}"
         href="{% url 'trades:relatorio_mensal' %}">

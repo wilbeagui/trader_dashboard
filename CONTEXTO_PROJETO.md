@@ -39,6 +39,7 @@ operacional.
 - Win Rate Contextualizado pela EM ← IMPLEMENTADO (Passo 9)
 - Análise por Setup/Tag ← IMPLEMENTADO (Passo 10)
 - Correlação Overtrading × Revenge ← IMPLEMENTADO (Passo 11)
+- Comparativo de Períodos ← IMPLEMENTADO (Passo 12)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -89,7 +90,8 @@ trader_dashboard/
 │       ├── operacoes.html
 │       ├── journal.html          ← CRIADO (Passo 1)
 │       ├── relatorio_mensal.html ← CRIADO (Passo 4)
-│       └── analise_setup.html    ← CRIADO (Passo 10)
+│       ├── analise_setup.html    ← CRIADO (Passo 10)
+│       └── comparativo.html      ← CRIADO (Passo 12)
 ├── .env
 ├── .gitignore
 ├── CONTEXTO_PROJETO.md
@@ -237,16 +239,15 @@ Observações do trader sobre o pregão como um todo.
   JournalOperacaoAdmin com filtros por emocao e setup;
   AnotacaoDiaAdmin com list_display (data_sessao, estado_emocional, score_dia,
   atualizado_em), list_filter por estado_emocional, ordering por -data_sessao
-- `apps/trades/views.py` → 8 views ativas + helpers de cálculo e gráficos;
+- `apps/trades/views.py` → 9 views ativas + helpers de cálculo e gráficos;
   inclui _grafico_drawdown(df) adicionado no Passo 7;
-  _calcular_comportamental() atualizado no Passo 8 com revenge_pct e avaliação relativa;
-  _calcular_comportamental() atualizado no Passo 11 com correlação Pearson
-  overtrading × revenge e % de revenge em dias normais vs dias de overtrading;
-  _grafico_analise_setup() e _grafico_analise_tag() adicionados no Passo 10;
-  view analise_setup() adicionada no Passo 10
+  _calcular_comportamental() atualizado nos Passos 8 e 11;
+  _grafico_analise_setup/tag() e analise_setup() adicionados no Passo 10;
+  _grafico_comparativo_curvas/barras() e comparativo() adicionados no Passo 12
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
-  /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/, /analise-setup/
+  /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/,
+  /analise-setup/, /comparativo/
 - `apps/trades/services.py` → lógica de importação do CSV do Profitchart;
   mapeamento corrigido no Passo 3: resultado_operacao_pontos ← 'Res. Operação (%)',
   resultado_operacao ← 'Res. Operação'; chamada corrigida na view importar():
@@ -269,7 +270,12 @@ Observações do trader sobre o pregão como um todo.
   seção "Correlação Overtrading × Revenge" adicionada no Passo 11 (seção 2b):
   3 KPIs (Pearson, % revenge dias normais, % revenge dias overtrading) +
   bloco de interpretação textual automática gerado no backend
-- `templates/trades/analise_setup.html` → página de análise por setup e tag (Passo 10):
+- `templates/trades/comparativo.html` → página de comparativo de períodos (Passo 12):
+  seletor de datas para P1 e P2 com min/max dinâmico; 4 KPIs de resumo;
+  gráfico de curvas sobrepostas (eixo X normalizado 0–100%); gráfico de barras
+  agrupadas; tabela completa com delta colorido por métrica; legenda de interpretação
+- `templates/base.html` → link "Comparativo" adicionado no sidebar (Passo 12),
+  após Análise por Setup; ícone bi-layout-split
   filtros de período e setup; resumo geral (4 KPIs); tabela de setups com WR, resultado,
   gain/loss médio, payoff, EM, qualidade entrada/saída; clique na linha filtra detalhe;
   detalhe do setup selecionado com 6 KPIs + lista de operações individuais;
@@ -340,6 +346,13 @@ Observações do trader sobre o pregão como um todo.
   < 1 (vermelho); fallback para win_rate >= 50 quando não há wins e losses simultâneos;
   kpi-sub contextualiza: "ganhos compensam as perdas" / "payoff insuficiente para o WR" /
   "X W · Y L" (fallback); mesma lógica já aplicada no Dashboard desde o Passo 2
+- Comparativo de Períodos (Passo 12): dois QuerySets independentes filtrados por
+  abertura__date__gte/lte; _metricas_periodo() helper interno à view calcula todas
+  as métricas; curvas sobrepostas com eixo X normalizado (% de operações) para
+  comparar períodos de tamanhos diferentes; _delta() helper retorna (valor, classe CSS);
+  drawdown: delta invertido — menor drawdown é melhor, então delta negativo = verde;
+  estado inicial (sem períodos definidos) mostra formulário sem tabela; min/max dos
+  inputs de data limitados ao intervalo de dados disponíveis no banco
 - Correlação Overtrading × Revenge (Passo 11): calculada via pandas .corr() (Pearson)
   entre total_ops e n_revenge por dia; n_revenge por dia reconstruído iterando o df
   já ordenado (mesma lógica do loop de revenge_ops, mas com pd.Series de flags);
@@ -448,6 +461,18 @@ Observações do trader sobre o pregão como um todo.
 - Score calculado: resultado (40%) + win rate (20%) + MEP (20%) + MEN (20%);
   régua resultado ±R$500; dias sem losers = nota 5 no componente MEN
 
+### Comparativo de Períodos (adicionado no Passo 12)
+- Dois QuerySets independentes (_qs_periodo): NUNCA filtrar um único qs e fatiar
+- _metricas_periodo(df): helper INTERNO à view comparativo(); não reutilizar em outras views
+- _delta(v1, v2): retorna tupla (valor, classe_css); None se qualquer valor ausente
+- Drawdown no delta: lógica INVERTIDA — delta negativo = P1 menor drawdown = verde
+- Curvas sobrepostas: eixo X normalizado 0–100% via índice/len — permite comparar
+  períodos com número de operações diferentes sem distorção visual
+- Estado inicial (periodos_definidos=False): renderiza formulário + mensagem instrucional,
+  SEM calcular métricas (evita queries desnecessárias)
+- min/max dos inputs de data: passados via data_min e data_max do context
+- NUNCA usar total_acumulado do banco — sempre recalcular com cumsum() no df
+
 ### Correlação Overtrading × Revenge (adicionado no Passo 11)
 - Calculada em _calcular_comportamental() sobre ops_por_dia enriquecido com n_revenge
 - n_revenge por dia: pd.Series de flags (df["is_revenge"]) → groupby("data_dia").sum()
@@ -546,6 +571,7 @@ Observações do trader sobre o pregão como um todo.
 - Win Rate Contextualizado → cor do card Dia baseada em payoff_ratio_dia >= 1 (Passo 9)
 - Análise por Setup/Tag → analise_setup(); EM, payoff, qualidade por setup e tag (Passo 10)
 - Correlação Overtrading × Revenge → Pearson por dia; % revenge em dias normais vs overtrade (Passo 11)
+- Comparativo de Períodos → comparativo(); delta por métrica; curvas sobrepostas normalizadas (Passo 12)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades; avaliação relativa via
@@ -792,14 +818,36 @@ Consistência com o Dashboard, que já usava essa lógica desde o Passo 2.
 
 ---
 
-### PASSO 12 — Comparativo de Períodos ★★★☆☆
-**Objetivo:** comparar dois períodos lado a lado com delta de cada métrica.
+### PASSO 12 — Comparativo de Períodos ★★★☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- View `comparativo()` → `/comparativo/`: recebe p1_inicio, p1_fim, p2_inicio, p2_fim
+  via GET; carrega dois DataFrames independentes; calcula métricas via helper interno
+  `_metricas_periodo(df)`; gera deltas via `_delta(v1, v2)` → (valor, classe CSS)
+- Helpers `_grafico_comparativo_curvas()` e `_grafico_comparativo_barras()`:
+  curvas sobrepostas com eixo X normalizado 0–100% (permite comparar períodos de
+  tamanhos diferentes); barras agrupadas das principais métricas
+- Rota `/comparativo/` adicionada ao `urls.py`
+- `comparativo.html`: seletor de datas P1/P2 com min/max dinâmico; 4 KPIs de
+  resumo (resultado P1, resultado P2, delta resultado, vencedor); dois gráficos;
+  tabela completa com todas as métricas e delta colorido; legenda de interpretação;
+  estado inicial instrucional quando períodos não definidos
+- Link "Comparativo" adicionado ao sidebar do `base.html` (ícone bi-layout-split)
 
-**Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view comparativo()
-- `apps/trades/urls.py` → rota /comparativo/
-- `templates/trades/comparativo.html` → tabela Métrica | Período 1 | Período 2 | Delta
-- `templates/base.html` → link no sidebar
+**Métricas comparadas:** dias operados, total de ops, wins/losses, win rate,
+resultado total, pontos, gain/loss médio, payoff, EM, drawdown, aproveit. MEP
+
+**Decisão de design:** delta do drawdown invertido — menor drawdown é melhor,
+portanto delta negativo exibe verde (consistente com a semântica financeira)
+
+**Arquivos alterados/criados:**
+`apps/trades/views.py`, `apps/trades/urls.py`, `templates/base.html`,
+`templates/trades/comparativo.html` (novo)
+
+**Bug corrigido:**
+- Duas linhas da tabela em `comparativo.html` usavam `{% include "trades/_comp_row.html" %}`
+  referenciando um partial que nunca foi criado → TemplateDoesNotExist em produção;
+  corrigido substituindo os dois `{% include %}` por `<tr>` inline no mesmo padrão
+  das demais linhas da tabela; o arquivo `_comp_row.html` não deve ser criado
 
 ---
 
@@ -891,7 +939,7 @@ Fase 2 — Diferencial competitivo:
   ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → ~~Passo 10~~ ✅ → Passo 14 → ~~Passo 17~~ ✅
 
 Fase 3 — Visão de negócio:
-  ~~Passo 4~~ ✅ → Passo 12 → Passo 16
+  ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → Passo 16
 
 Fase 4 — Refinamentos comportamentais:
   ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → Passo 13 → Passo 15

@@ -14,4 +14,5 @@ urlpatterns = [
          views.salvar_journal, name='salvar_journal'),
     path('relatorio-mensal/', views.relatorio_mensal, name='relatorio_mensal'),
     path('analise-setup/',    views.analise_setup,    name='analise_setup'),
+    path('comparativo/',      views.comparativo,      name='comparativo'),
 ]

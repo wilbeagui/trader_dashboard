@@ -1012,6 +1012,111 @@ def _grafico_analise_tag(metricas: list) -> str:
 
 
 # ──────────────────────────────────────────────
+# Gráficos — comparativo()
+# ──────────────────────────────────────────────
+
+def _grafico_comparativo_curvas(df1, df2, p1_ini, p1_fim, p2_ini, p2_fim) -> str:
+    """
+    Curvas de capital dos dois períodos sobrepostas num mesmo gráfico.
+    Eixo X normalizado como % do total de operações de cada período (0–100).
+    """
+    if df1.empty and df2.empty:
+        return ""
+
+    fig = go.Figure()
+
+    def _add_curva(df, label, cor, cor_fill):
+        if df.empty:
+            return
+        acum = df["resultado_operacao"].cumsum().tolist()
+        # Normaliza X como índice percentual (0 a 100) para comparar períodos
+        n = len(acum)
+        xs = [round(i / (n - 1) * 100, 1) if n > 1 else 0 for i in range(n)]
+        fig.add_trace(go.Scatter(
+            x=xs, y=acum,
+            mode="lines",
+            name=label,
+            line=dict(color=cor, width=2),
+            fill="tozeroy",
+            fillcolor=cor_fill,
+            hovertemplate=f"<b>{label}</b><br>Op: %{{x:.0f}}%<br>Acum: R$ %{{y:,.2f}}<extra></extra>",
+        ))
+
+    label1 = f"P1: {p1_ini} → {p1_fim}"
+    label2 = f"P2: {p2_ini} → {p2_fim}"
+    _add_curva(df1, label1, COR_POSITIVO, "rgba(63,182,139,0.10)")
+    _add_curva(df2, label2, COR_AZUL,     "rgba(56,139,253,0.10)")
+
+    fig.add_hline(y=0, line_color=COR_GRADE, line_width=1)
+    fig.update_layout(**_layout_base(
+        height=300,
+        showlegend=True,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02,
+            xanchor="right", x=1,
+            font=dict(size=11, color=COR_TEXTO),
+        ),
+        xaxis=dict(
+            gridcolor=COR_GRADE, showgrid=True,
+            ticksuffix="%", title=dict(text="Progresso das operações", font=dict(size=10)),
+        ),
+        yaxis=dict(
+            gridcolor=COR_GRADE, zerolinecolor=COR_GRADE,
+            tickprefix="R$ ", tickformat=",.0f",
+        ),
+    ))
+    return _to_html(fig)
+
+
+def _grafico_comparativo_barras(m1, m2) -> str:
+    """
+    Barras agrupadas das principais métricas dos dois períodos.
+    """
+    if not m1 or not m2:
+        return ""
+
+    metricas = [
+        ("Win Rate (%)",  m1["win_rate"],  m2["win_rate"]),
+        ("Resultado (R$)", m1["resultado"], m2["resultado"]),
+        # inverte sinal p/ visual
+        ("Drawdown (R$)", -m1["drawdown"], -m2["drawdown"]),
+    ]
+    if m1.get("em") is not None and m2.get("em") is not None:
+        metricas.append(("EM (R$)", m1["em"], m2["em"]))
+    if m1.get("payoff") is not None and m2.get("payoff") is not None:
+        metricas.append(("Payoff", m1["payoff"], m2["payoff"]))
+
+    labels = [m[0] for m in metricas]
+    vals1 = [m[1] for m in metricas]
+    vals2 = [m[2] for m in metricas]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        name="Período 1", x=labels, y=vals1,
+        marker_color=COR_POSITIVO, marker_opacity=0.85,
+        hovertemplate="<b>%{x}</b><br>P1: %{y:,.2f}<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        name="Período 2", x=labels, y=vals2,
+        marker_color=COR_AZUL, marker_opacity=0.85,
+        hovertemplate="<b>%{x}</b><br>P2: %{y:,.2f}<extra></extra>",
+    ))
+    fig.update_layout(**_layout_base(
+        height=280,
+        barmode="group",
+        showlegend=True,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02,
+            xanchor="right", x=1,
+            font=dict(size=11, color=COR_TEXTO),
+        ),
+        xaxis=dict(type="category", gridcolor=COR_GRADE, showgrid=False),
+        yaxis=dict(gridcolor=COR_GRADE, zerolinecolor=COR_GRADE),
+    ))
+    return _to_html(fig)
+
+
+# ──────────────────────────────────────────────
 # Views
 # ──────────────────────────────────────────────
 
@@ -1840,6 +1945,157 @@ def analise_setup(request):
         "grafico_tag":         grafico_tag,
     }
     return render(request, "trades/analise_setup.html", context)
+
+
+def comparativo(request):
+    """
+    Comparativo lado a lado de dois períodos definidos pelo usuário.
+    Mostra delta de cada métrica e gráficos sobrepostos de curva de capital.
+    """
+    # ── Parâmetros dos dois períodos ────────────────────────────────
+    p1_inicio = request.GET.get("p1_inicio", "").strip()
+    p1_fim = request.GET.get("p1_fim",    "").strip()
+    p2_inicio = request.GET.get("p2_inicio", "").strip()
+    p2_fim = request.GET.get("p2_fim",    "").strip()
+
+    periodos_definidos = all([p1_inicio, p1_fim, p2_inicio, p2_fim])
+
+    # ── Datas disponíveis para os seletores ─────────────────────────
+    datas_disponiveis = list(
+        Operacao.objects.dates("abertura", "day", order="ASC")
+    )
+    data_min = datas_disponiveis[0].strftime(
+        "%Y-%m-%d") if datas_disponiveis else ""
+    data_max = datas_disponiveis[-1].strftime(
+        "%Y-%m-%d") if datas_disponiveis else ""
+
+    if not periodos_definidos:
+        return render(request, "trades/comparativo.html", {
+            "sem_dados": not datas_disponiveis,
+            "periodos_definidos": False,
+            "data_min":          data_min,
+            "data_max":          data_max,
+            "p1_inicio": p1_inicio, "p1_fim": p1_fim,
+            "p2_inicio": p2_inicio, "p2_fim": p2_fim,
+        })
+
+    # ── Carrega os dois conjuntos de operações ───────────────────────
+    campos = [
+        "abertura", "resultado_operacao", "resultado_operacao_pontos",
+        "mep", "men",
+    ]
+
+    def _qs_periodo(ini, fim):
+        qs = Operacao.objects.filter(
+            abertura__date__gte=ini,
+            abertura__date__lte=fim,
+        ).values(*campos).order_by("abertura")
+        if not qs.exists():
+            return pd.DataFrame()
+        df = pd.DataFrame(list(qs))
+        df["abertura"] = pd.to_datetime(
+            df["abertura"], utc=True).dt.tz_convert(TZ_BR)
+        for col in ["resultado_operacao", "resultado_operacao_pontos", "mep", "men"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        return df
+
+    df1 = _qs_periodo(p1_inicio, p1_fim)
+    df2 = _qs_periodo(p2_inicio, p2_fim)
+
+    # ── Calcula métricas de um DataFrame de período ─────────────────
+    def _metricas_periodo(df):
+        if df.empty:
+            return None
+        total = len(df)
+        wins_mask = df["resultado_operacao"] > 0
+        losses_mask = df["resultado_operacao"] <= 0
+        n_wins = int(wins_mask.sum())
+        n_losses = int(losses_mask.sum())
+        win_rate = (n_wins / total * 100) if total else 0.0
+        resultado = float(df["resultado_operacao"].sum())
+        pontos = float(df["resultado_operacao_pontos"].sum())
+        gain_medio = float(
+            df.loc[wins_mask,   "resultado_operacao"].mean()) if n_wins else None
+        loss_medio = float(
+            df.loc[losses_mask, "resultado_operacao"].mean()) if n_losses else None
+        payoff = round(gain_medio / abs(loss_medio),
+                       2) if gain_medio and loss_medio else None
+        em = round(
+            (win_rate / 100 * gain_medio) +
+            ((1 - win_rate / 100) * loss_medio), 2
+        ) if gain_medio is not None and loss_medio is not None else None
+
+        # Drawdown
+        acum = df["resultado_operacao"].cumsum()
+        pico = acum.cummax()
+        drawdown = float((pico - acum).max())
+
+        # MEP aproveitamento (winners)
+        df_w = df[wins_mask & (df["mep"] > 0)]
+        aprov_medio = round(
+            float((df_w["resultado_operacao"] / df_w["mep"] * 100).mean()), 1
+        ) if not df_w.empty else None
+
+        dias = df["abertura"].dt.date.nunique()
+
+        return {
+            "total_ops":   total,
+            "n_wins":      n_wins,
+            "n_losses":    n_losses,
+            "win_rate":    round(win_rate, 1),
+            "resultado":   round(resultado, 2),
+            "pontos":      round(pontos, 0),
+            "gain_medio":  round(gain_medio, 2) if gain_medio else None,
+            "loss_medio":  round(loss_medio, 2) if loss_medio else None,
+            "payoff":      payoff,
+            "em":          em,
+            "drawdown":    round(drawdown, 2),
+            "aprov_medio": aprov_medio,
+            "dias":        dias,
+        }
+
+    m1 = _metricas_periodo(df1)
+    m2 = _metricas_periodo(df2)
+
+    # ── Deltas (P1 − P2) ────────────────────────────────────────────
+    def _delta(v1, v2):
+        """Retorna delta e classe CSS. None se qualquer valor ausente."""
+        if v1 is None or v2 is None:
+            return None, ""
+        d = round(v1 - v2, 2)
+        cls = "val-pos" if d > 0 else ("val-neg" if d < 0 else "")
+        return d, cls
+
+    deltas = {}
+    if m1 and m2:
+        for campo in ["resultado", "win_rate", "total_ops", "payoff",
+                      "em", "drawdown", "aprov_medio", "pontos", "dias"]:
+            deltas[campo] = _delta(m1.get(campo), m2.get(campo))
+        # drawdown: delta negativo é MELHOR (menor drawdown)
+        if deltas["drawdown"][0] is not None:
+            d, _ = deltas["drawdown"]
+            deltas["drawdown"] = (d, "val-pos" if d <
+                                  0 else ("val-neg" if d > 0 else ""))
+
+    # ── Gráfico: curvas de capital sobrepostas ───────────────────────
+    grafico_curvas = _grafico_comparativo_curvas(
+        df1, df2, p1_inicio, p1_fim, p2_inicio, p2_fim)
+
+    # ── Gráfico: barras de métricas lado a lado ──────────────────────
+    grafico_barras = _grafico_comparativo_barras(m1, m2)
+
+    return render(request, "trades/comparativo.html", {
+        "sem_dados": not datas_disponiveis,
+        "periodos_definidos": True,
+        "data_min":           data_min,
+        "data_max":           data_max,
+        "p1_inicio": p1_inicio, "p1_fim": p1_fim,
+        "p2_inicio": p2_inicio, "p2_fim": p2_fim,
+        "m1": m1, "m2": m2,
+        "deltas":             deltas,
+        "grafico_curvas":     grafico_curvas,
+        "grafico_barras":     grafico_barras,
+    })
 
 
 def relatorio_mensal(request):

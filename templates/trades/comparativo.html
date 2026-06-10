@@ -1,0 +1,559 @@
+{% extends "base.html" %}
+
+{% block title %}Comparativo de Períodos · Trader{% endblock %}
+{% block page_title %}Comparativo de Períodos{% endblock %}
+
+{% block topbar_meta %}
+  {% if periodos_definidos %}
+    <i class="bi bi-layout-split" style="color:var(--accent-blue);font-size:11px;margin-right:4px;"></i>
+    {{ p1_inicio }} → {{ p1_fim }} &nbsp;vs&nbsp; {{ p2_inicio }} → {{ p2_fim }}
+  {% else %}
+    Selecione dois períodos para comparar
+  {% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Seletor de períodos ── */
+  .periodo-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .periodo-label {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .8px;
+    color: var(--text-muted); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .periodo-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  /* ── Tabela de comparativo ── */
+  .comp-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; font-family: var(--font-mono);
+  }
+  .comp-table th {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .6px;
+    color: var(--text-muted);
+  }
+  .comp-table th.col-p1 { color: var(--positive); }
+  .comp-table th.col-p2 { color: var(--accent-blue); }
+  .comp-table th.col-delta { color: var(--text-muted); }
+  .comp-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-dim);
+    vertical-align: middle;
+  }
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .comp-table td.metric-name {
+    font-weight: 600; color: var(--text-dim);
+    font-family: var(--font-sans); font-size: 13px;
+  }
+  .comp-table td.col-p1 { color: var(--positive); font-weight: 600; }
+  .comp-table td.col-p2 { color: var(--accent-blue); font-weight: 600; }
+  .comp-table td.col-delta { font-weight: 700; }
+
+  /* ── Delta badge ── */
+  .delta-pos { color: var(--positive); }
+  .delta-neg { color: var(--negative); }
+  .delta-zero { color: var(--text-muted); }
+
+  /* ── KPI summary cards ── */
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .kpi-card .kpi-label {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .8px;
+    color: var(--text-muted); margin-bottom: 4px;
+  }
+  .kpi-card .kpi-value {
+    font-family: var(--font-mono); font-size: 20px;
+    font-weight: 700; line-height: 1.1;
+  }
+  .kpi-card .kpi-sub {
+    font-size: 11px; color: var(--text-muted);
+    margin-top: 3px; font-family: var(--font-mono);
+  }
+
+  .vencedor-badge {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .5px;
+    padding: 2px 7px; border-radius: 20px;
+    background: var(--positive-soft);
+    color: var(--positive);
+    border: 1px solid rgba(63,182,139,.2);
+    margin-left: 6px;
+  }
+
+  .section-title {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .8px;
+    color: var(--text-muted); padding-bottom: 10px;
+    margin-bottom: 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .empty-state {
+    text-align: center; padding: 60px 16px;
+    color: var(--text-muted); font-size: 13px;
+  }
+  .empty-state i { font-size: 40px; display: block; margin-bottom: 12px; opacity: .3; }
+
+  .val-pos { color: var(--positive); font-weight: 600; }
+  .val-neg { color: var(--negative); font-weight: 600; }
+  .val-warn { color: var(--warning); font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if sem_dados %}
+<div class="empty-state">
+  <i class="bi bi-inbox"></i>
+  <p>Nenhuma operação encontrada no banco.</p>
+  <a href="{% url 'trades:importar' %}" class="btn-filter" style="display:inline-flex;gap:6px;">
+    <i class="bi bi-upload"></i> Importar CSV
+  </a>
+</div>
+
+{% else %}
+
+<!-- ══ Seletor de períodos ══ -->
+<form method="get">
+  <div class="row g-3 mb-4">
+
+    <!-- Período 1 -->
+    <div class="col-12 col-xl-5">
+      <div class="periodo-card">
+        <div class="periodo-label">
+          <span class="periodo-dot" style="background:var(--positive);"></span>
+          Período 1
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div>
+            <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">De</label>
+            <input type="date" name="p1_inicio" class="form-control"
+                   style="width:148px;" value="{{ p1_inicio }}"
+                   {% if data_min %}min="{{ data_min }}" max="{{ data_max }}"{% endif %}>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Até</label>
+            <input type="date" name="p1_fim" class="form-control"
+                   style="width:148px;" value="{{ p1_fim }}"
+                   {% if data_min %}min="{{ data_min }}" max="{{ data_max }}"{% endif %}>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Separador vs -->
+    <div class="col-12 col-xl-2 d-flex align-items-center justify-content-center">
+      <span style="font-family:var(--font-mono);font-size:18px;font-weight:700;
+                   color:var(--text-muted);letter-spacing:2px;">VS</span>
+    </div>
+
+    <!-- Período 2 -->
+    <div class="col-12 col-xl-5">
+      <div class="periodo-card">
+        <div class="periodo-label">
+          <span class="periodo-dot" style="background:var(--accent-blue);"></span>
+          Período 2
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div>
+            <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">De</label>
+            <input type="date" name="p2_inicio" class="form-control"
+                   style="width:148px;" value="{{ p2_inicio }}"
+                   {% if data_min %}min="{{ data_min }}" max="{{ data_max }}"{% endif %}>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Até</label>
+            <input type="date" name="p2_fim" class="form-control"
+                   style="width:148px;" value="{{ p2_fim }}"
+                   {% if data_min %}min="{{ data_min }}" max="{{ data_max }}"{% endif %}>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:24px;">
+    <button type="submit" class="btn-filter">
+      <i class="bi bi-layout-split"></i> Comparar
+    </button>
+    <a href="{% url 'trades:comparativo' %}" class="btn-filter-clear">
+      <i class="bi bi-x"></i> Limpar
+    </a>
+  </div>
+</form>
+
+
+{% if not periodos_definidos %}
+<!-- Estado inicial — sem períodos selecionados -->
+<div class="empty-state" style="padding:40px;">
+  <i class="bi bi-layout-split" style="opacity:.2;"></i>
+  <p style="font-size:14px;margin-bottom:6px;">Selecione dois períodos acima e clique em <strong>Comparar</strong>.</p>
+  <p style="font-size:12px;color:var(--text-muted);">
+    Os períodos podem se sobrepor — útil para comparar meses consecutivos ou antes/depois de uma mudança de setup.
+  </p>
+</div>
+
+{% else %}
+
+{% if not m1 and not m2 %}
+<div class="alert-dash alert-warning">
+  <i class="bi bi-exclamation-triangle"></i>
+  Nenhuma operação encontrada nos períodos selecionados. Ajuste as datas.
+</div>
+
+{% else %}
+
+<!-- ══ KPIs de resumo ══ -->
+<div class="row g-3 mb-4">
+
+  {% if m1 %}
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card">
+      <div class="kpi-label" style="color:var(--positive);">
+        <i class="bi bi-circle-fill" style="font-size:7px;margin-right:4px;"></i>Período 1 · Resultado
+      </div>
+      <div class="kpi-value {% if m1.resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        {% if m1.resultado >= 0 %}+{% endif %}R$ {{ m1.resultado|floatformat:2 }}
+      </div>
+      <div class="kpi-sub">{{ m1.total_ops }} ops · {{ m1.dias }} dias</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if m2 %}
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card">
+      <div class="kpi-label" style="color:var(--accent-blue);">
+        <i class="bi bi-circle-fill" style="font-size:7px;margin-right:4px;"></i>Período 2 · Resultado
+      </div>
+      <div class="kpi-value {% if m2.resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        {% if m2.resultado >= 0 %}+{% endif %}R$ {{ m2.resultado|floatformat:2 }}
+      </div>
+      <div class="kpi-sub">{{ m2.total_ops }} ops · {{ m2.dias }} dias</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if m1 and m2 and deltas.resultado %}
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Delta Resultado</div>
+      <div class="kpi-value {{ deltas.resultado.1 }}">
+        {% if deltas.resultado.0 >= 0 %}+{% endif %}R$ {{ deltas.resultado.0|floatformat:2 }}
+      </div>
+      <div class="kpi-sub">P1 menos P2</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if m1 and m2 %}
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Vencedor</div>
+      {% if m1.resultado > m2.resultado %}
+        <div class="kpi-value val-pos" style="font-size:16px;">Período 1</div>
+        <div class="kpi-sub">melhor resultado financeiro</div>
+      {% elif m2.resultado > m1.resultado %}
+        <div class="kpi-value" style="font-size:16px;color:var(--accent-blue);">Período 2</div>
+        <div class="kpi-sub">melhor resultado financeiro</div>
+      {% else %}
+        <div class="kpi-value" style="font-size:16px;color:var(--text-muted);">Empate</div>
+        <div class="kpi-sub">resultados iguais</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+
+<!-- ══ Gráficos ══ -->
+{% if grafico_curvas or grafico_barras %}
+<div class="row g-3 mb-4">
+
+  {% if grafico_curvas %}
+  <div class="col-12 col-xl-7">
+    <div class="chart-card">
+      <div class="section-title">
+        <i class="bi bi-graph-up"></i> Curvas de Capital Sobrepostas
+        <span style="font-size:10px;font-weight:400;color:var(--text-muted);margin-left:auto;">
+          eixo X = % do total de operações de cada período
+        </span>
+      </div>
+      {{ grafico_curvas|safe }}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if grafico_barras %}
+  <div class="col-12 col-xl-5">
+    <div class="chart-card">
+      <div class="section-title">
+        <i class="bi bi-bar-chart-grouped"></i> Métricas Lado a Lado
+      </div>
+      {{ grafico_barras|safe }}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+
+<!-- ══ Tabela comparativa detalhada ══ -->
+<div class="chart-card mb-4">
+  <div class="section-title">
+    <i class="bi bi-table"></i> Tabela Comparativa
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th style="width:220px;">Métrica</th>
+          <th class="col-p1" style="text-align:right;">
+            <i class="bi bi-circle-fill" style="font-size:7px;margin-right:4px;"></i>
+            Período 1<br>
+            <span style="font-weight:400;font-size:9px;color:var(--text-muted);">{{ p1_inicio }} → {{ p1_fim }}</span>
+          </th>
+          <th class="col-p2" style="text-align:right;">
+            <i class="bi bi-circle-fill" style="font-size:7px;margin-right:4px;"></i>
+            Período 2<br>
+            <span style="font-weight:400;font-size:9px;color:var(--text-muted);">{{ p2_inicio }} → {{ p2_fim }}</span>
+          </th>
+          <th class="col-delta" style="text-align:right;">Delta (P1 − P2)</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr>
+          <td class="metric-name">Dias Operados</td>
+          <td class="col-p1" style="text-align:right;">{% if m1 %}{{ m1.dias }}{% else %}—{% endif %}</td>
+          <td class="col-p2" style="text-align:right;">{% if m2 %}{{ m2.dias }}{% else %}—{% endif %}</td>
+          <td style="text-align:right;">
+            {% if deltas.dias.0 is not None %}
+              <span class="{{ deltas.dias.1 }}">
+                {% if deltas.dias.0 > 0 %}+{% endif %}{{ deltas.dias.0 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Total de Operações</td>
+          <td class="col-p1" style="text-align:right;">{% if m1 %}{{ m1.total_ops }}{% else %}—{% endif %}</td>
+          <td class="col-p2" style="text-align:right;">{% if m2 %}{{ m2.total_ops }}{% else %}—{% endif %}</td>
+          <td style="text-align:right;">
+            {% if deltas.total_ops.0 is not None %}
+              <span class="{{ deltas.total_ops.1 }}">
+                {% if deltas.total_ops.0 > 0 %}+{% endif %}{{ deltas.total_ops.0 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Wins / Losses</td>
+          <td class="col-p1" style="text-align:right;">
+            {% if m1 %}<span class="val-pos">{{ m1.n_wins }}</span> / <span class="val-neg">{{ m1.n_losses }}</span>{% else %}—{% endif %}
+          </td>
+          <td class="col-p2" style="text-align:right;">
+            {% if m2 %}<span class="val-pos">{{ m2.n_wins }}</span> / <span class="val-neg">{{ m2.n_losses }}</span>{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;color:var(--text-muted);">—</td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Win Rate</td>
+          <td class="col-p1" style="text-align:right;">{% if m1 %}{{ m1.win_rate|floatformat:1 }}%{% else %}—{% endif %}</td>
+          <td class="col-p2" style="text-align:right;">{% if m2 %}{{ m2.win_rate|floatformat:1 }}%{% else %}—{% endif %}</td>
+          <td style="text-align:right;">
+            {% if deltas.win_rate.0 is not None %}
+              <span class="{{ deltas.win_rate.1 }}">
+                {% if deltas.win_rate.0 > 0 %}+{% endif %}{{ deltas.win_rate.0|floatformat:1 }}pp
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Resultado Total</td>
+          <td class="col-p1" style="text-align:right;">
+            {% if m1 %}
+              <span class="{% if m1.resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m1.resultado >= 0 %}+{% endif %}R$ {{ m1.resultado|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="col-p2" style="text-align:right;">
+            {% if m2 %}
+              <span class="{% if m2.resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m2.resultado >= 0 %}+{% endif %}R$ {{ m2.resultado|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if deltas.resultado.0 is not None %}
+              <span class="{{ deltas.resultado.1 }}">
+                {% if deltas.resultado.0 > 0 %}+{% endif %}R$ {{ deltas.resultado.0|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Resultado em Pontos</td>
+          <td class="col-p1" style="text-align:right;">
+            {% if m1 %}
+              <span class="{% if m1.pontos >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m1.pontos >= 0 %}+{% endif %}{{ m1.pontos|floatformat:0 }} pts
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="col-p2" style="text-align:right;">
+            {% if m2 %}
+              <span class="{% if m2.pontos >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m2.pontos >= 0 %}+{% endif %}{{ m2.pontos|floatformat:0 }} pts
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if deltas.pontos.0 is not None %}
+              <span class="{{ deltas.pontos.1 }}">
+                {% if deltas.pontos.0 > 0 %}+{% endif %}{{ deltas.pontos.0|floatformat:0 }} pts
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Gain Médio</td>
+          <td class="col-p1" style="text-align:right;">{% if m1 and m1.gain_medio is not None %}+R$ {{ m1.gain_medio|floatformat:2 }}{% else %}—{% endif %}</td>
+          <td class="col-p2" style="text-align:right;">{% if m2 and m2.gain_medio is not None %}+R$ {{ m2.gain_medio|floatformat:2 }}{% else %}—{% endif %}</td>
+          <td style="text-align:right;color:var(--text-muted);">—</td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Loss Médio</td>
+          <td class="col-p1" style="text-align:right;">{% if m1 and m1.loss_medio is not None %}<span class="val-neg">R$ {{ m1.loss_medio|floatformat:2 }}</span>{% else %}—{% endif %}</td>
+          <td class="col-p2" style="text-align:right;">{% if m2 and m2.loss_medio is not None %}<span class="val-neg">R$ {{ m2.loss_medio|floatformat:2 }}</span>{% else %}—{% endif %}</td>
+          <td style="text-align:right;color:var(--text-muted);">—</td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Payoff Ratio</td>
+          <td class="col-p1" style="text-align:right;">
+            {% if m1 and m1.payoff is not None %}
+              <span class="{% if m1.payoff >= 1 %}val-pos{% else %}val-neg{% endif %}">{{ m1.payoff|floatformat:2 }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="col-p2" style="text-align:right;">
+            {% if m2 and m2.payoff is not None %}
+              <span class="{% if m2.payoff >= 1 %}val-pos{% else %}val-neg{% endif %}">{{ m2.payoff|floatformat:2 }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if deltas.payoff.0 is not None %}
+              <span class="{{ deltas.payoff.1 }}">
+                {% if deltas.payoff.0 > 0 %}+{% endif %}{{ deltas.payoff.0|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Expect. Matemática</td>
+          <td class="col-p1" style="text-align:right;">
+            {% if m1 and m1.em is not None %}
+              <span class="{% if m1.em >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m1.em >= 0 %}+{% endif %}R$ {{ m1.em|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="col-p2" style="text-align:right;">
+            {% if m2 and m2.em is not None %}
+              <span class="{% if m2.em >= 0 %}val-pos{% else %}val-neg{% endif %}">
+                {% if m2.em >= 0 %}+{% endif %}R$ {{ m2.em|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if deltas.em.0 is not None %}
+              <span class="{{ deltas.em.1 }}">
+                {% if deltas.em.0 > 0 %}+{% endif %}R$ {{ deltas.em.0|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Drawdown Máximo</td>
+          <td class="col-p1" style="text-align:right;">
+            {% if m1 %}<span class="val-neg">R$ {{ m1.drawdown|floatformat:2 }}</span>{% else %}—{% endif %}
+          </td>
+          <td class="col-p2" style="text-align:right;">
+            {% if m2 %}<span class="val-neg">R$ {{ m2.drawdown|floatformat:2 }}</span>{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if deltas.drawdown.0 is not None %}
+              <span class="{{ deltas.drawdown.1 }}">
+                {% if deltas.drawdown.0 > 0 %}+{% endif %}R$ {{ deltas.drawdown.0|floatformat:2 }}
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <td class="metric-name">Aproveit. MEP</td>
+          <td class="col-p1" style="text-align:right;">
+            {% if m1 and m1.aprov_medio is not None %}{{ m1.aprov_medio|floatformat:1 }}%{% else %}—{% endif %}
+          </td>
+          <td class="col-p2" style="text-align:right;">
+            {% if m2 and m2.aprov_medio is not None %}{{ m2.aprov_medio|floatformat:1 }}%{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if deltas.aprov_medio.0 is not None %}
+              <span class="{{ deltas.aprov_medio.1 }}">
+                {% if deltas.aprov_medio.0 > 0 %}+{% endif %}{{ deltas.aprov_medio.0|floatformat:1 }}pp
+              </span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Legenda de delta -->
+  <div style="margin-top:12px;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">
+    <span class="val-pos">▲ positivo</span> = P1 melhor &nbsp;·&nbsp;
+    <span class="val-neg">▼ negativo</span> = P2 melhor &nbsp;·&nbsp;
+    <em>Exceção: drawdown — menor é melhor (▼ verde)</em>
+  </div>
+
+</div>
+
+{% endif %}{# m1 or m2 #}
+{% endif %}{# periodos_definidos #}
+{% endif %}{# sem_dados #}
+
+{% endblock %}
