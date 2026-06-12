@@ -528,6 +528,10 @@ def _calcular_comportamental(df: pd.DataFrame, params: ParametrosTrader) -> dict
     # ── Gráfico Consistência: resultado diário ──────────────────────
     grafico_consistencia = _grafico_consistencia(ops_por_dia)
 
+    # ── Gráfico Histograma de Duração ──────────────────────────────
+    grafico_histograma_duracao = _grafico_histograma_duracao(df)
+
+
     # ── Score Comportamental Consolidado (Passo 14) ────────────────
     # Cada indicador contribui 0–20 pontos → total 0–100
 
@@ -650,6 +654,7 @@ def _calcular_comportamental(df: pd.DataFrame, params: ParametrosTrader) -> dict
         "sequencia_atual":       sequencia_atual,
         "sequencia_tipo":        sequencia_tipo,
         "grafico_consistencia":  grafico_consistencia,
+        "grafico_histograma_duracao": grafico_histograma_duracao,  # ← Passo 15
         # Score Comportamental Consolidado (Passo 14)
         "score_comportamental": score_comportamental,
         "score_avaliacao":      score_avaliacao,
@@ -779,6 +784,66 @@ def _grafico_consistencia(ops_por_dia: pd.DataFrame) -> str:
     ))
     return _to_html(fig)
 
+def _grafico_histograma_duracao(df: pd.DataFrame) -> str:
+    if df.empty:
+        return ""
+
+    df = df.copy()
+    df["duracao_min"] = (
+        df["fechamento"] - df["abertura"]
+    ).dt.total_seconds() / 60
+
+    df = df[df["duracao_min"].between(0.1, 480)]
+
+    df_wins = df[df["resultado_operacao"] > 0]["duracao_min"]
+    df_losses = df[df["resultado_operacao"] <= 0]["duracao_min"]
+
+    if df_wins.empty and df_losses.empty:
+        return ""
+
+    fig = go.Figure()
+
+    if not df_wins.empty:
+        fig.add_trace(go.Histogram(
+            x=df_wins.tolist(),
+            name="Winners",
+            marker_color=COR_POSITIVO,
+            opacity=0.75,
+            nbinsx=20,
+            hovertemplate="Duração: %{x:.2f} min<br>Quantidade: %{y}<extra>Winners</extra>",
+        ))
+
+    if not df_losses.empty:
+        fig.add_trace(go.Histogram(
+            x=df_losses.tolist(),
+            name="Losers",
+            marker_color=COR_NEGATIVO,
+            opacity=0.75,
+            nbinsx=20,
+            hovertemplate="Duração: %{x:.2f} min<br>Quantidade: %{y}<extra>Losers</extra>",
+        ))
+
+    fig.update_layout(**_layout_base(
+        height=260,
+        barmode="overlay", # ← "relative, overlay ou group"
+        showlegend=True,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02,
+            xanchor="right", x=1,
+            font=dict(size=10, color=COR_TEXTO),
+        ),
+        xaxis=dict(
+            title=dict(text="Duração (minutos)", font=dict(size=10)),
+            gridcolor=COR_GRADE,
+            ticksuffix=" min",
+        ),
+        yaxis=dict(
+            title=dict(text="Nº de operações", font=dict(size=10)),
+            gridcolor=COR_GRADE,
+            tickformat="d",
+        ),
+    ))
+    return _to_html(fig)
 
 # ──────────────────────────────────────────────
 # Gráficos — dashboard
@@ -1732,6 +1797,8 @@ def comportamental(request):
     df = pd.DataFrame(registros)
     df["abertura"] = pd.to_datetime(
         df["abertura"], utc=True).dt.tz_convert(TZ_BR)
+    df["fechamento"] = pd.to_datetime(     
+        df["fechamento"], utc=True).dt.tz_convert(TZ_BR)
     df["resultado_operacao"] = df["resultado_operacao"].astype(float)
     df["mep"] = df["mep"].astype(float)
     df["men"] = df["men"].astype(float)

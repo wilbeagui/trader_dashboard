@@ -914,6 +914,15 @@
     {{ grafico_consistencia|safe }}
   {% endif %}
 
+  {% if grafico_histograma_duracao %}
+    <hr style="border-color:var(--border);margin:20px 0;">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);margin-bottom:10px;">
+      <i class="bi bi-clock-history" style="margin-right:4px;"></i>
+      Duração das Operações
+    </div>  
+    {{ grafico_histograma_duracao|safe }}
+  {% endif %}
+
 </div>
 
 {% endif %}

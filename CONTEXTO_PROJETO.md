@@ -42,6 +42,7 @@ operacional.
 - Comparativo de Períodos ← IMPLEMENTADO (Passo 12)
 - Volume por Ativo com Nº de Operações ← IMPLEMENTADO (Passo 13)
 - Score Comportamental Consolidado ← IMPLEMENTADO (Passo 14)
+- Histograma de Duração das Operações ← IMPLEMENTADO (Passo 15)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -560,6 +561,8 @@ Observações do trader sobre o pregão como um todo.
 ### Página Comportamental
 1. Overtrading → eixo duplo: barras resultado + linha qtd ops; limiar amarelo tracejado
 2. Consistência → barras resultado por dia; linha zero destacada
+3. Histograma de Duração → Winners vs Losers sobrepostos (overlay);
+   bins automáticos (nbinsx=20); filtro 0.1–480 min (Passo 15)
 
 ## Métricas avançadas implementadas
 - Expectativa Matemática → _calcular_metricas_avancadas(df); Dashboard
@@ -904,10 +907,35 @@ Cada elemento faz um trabalho, sem duplicação.
 
 ---
 
-### PASSO 15 — Histograma de Duração das Operações ★★★☆☆
-**Arquivos a alterar:**
-- `apps/trades/views.py` → _grafico_histograma_duracao(df): winners vs losers
-- `templates/trades/comportamental.html` → gráfico na seção de Consistência
+### PASSO 15 — Histograma de Duração das Operações ★★★☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- Helper `_grafico_histograma_duracao(df)`: calcula duracao_min =
+  (fechamento - abertura).dt.total_seconds() / 60; filtra entre 0.1 e
+  480 minutos; duas séries sobrepostas (Winners verde / Losers vermelho)
+  com opacity=0.75 e barmode="overlay"; nbinsx=20
+- Exibido ao final da seção 5 (Consistência) em `comportamental.html`,
+  dentro do mesmo chart-card, separado por <hr>; renderização condicional
+  com {% if grafico_histograma_duracao %}
+- `comportamental()` atualizada: conversão de `fechamento` para
+  America/Sao_Paulo adicionada (mesma lógica do `abertura`); sem essa
+  conversão a subtração produzia durações incorretas
+- Chave `grafico_histograma_duracao` adicionada ao return de
+  `_calcular_comportamental()`
+
+**Bugs resolvidos durante implementação:**
+- Gráfico gerado mas invisível: `df_wins` e `df_losses` eram Series pandas;
+  Plotly exige lista Python — corrigido com `.tolist()` em ambas as séries
+- `fechamento` não convertido para timezone na view `comportamental()` →
+  durações zeradas ou incorretas; corrigido adicionando `pd.to_datetime(
+  df["fechamento"], utc=True).dt.tz_convert(TZ_BR)`
+
+**Decisão de design:** barmode="overlay" mantido — barras sobrepostas com
+opacidade 0.75; leitura via hover (quantidade + categoria); usuário preferiu
+manter a sobreposição após entender a lógica de leitura do gráfico
+
+**Arquivos alterados:** `apps/trades/views.py`,
+`templates/trades/comportamental.html`
+**Sem migração de banco. Sem nova URL.**
 
 ---
 
@@ -980,7 +1008,7 @@ Fase 3 — Visão de negócio:
   ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → Passo 16
 
 Fase 4 — Refinamentos comportamentais:
-  ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → ~~Passo 13~~ ✅ → Passo 15
+  ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → ~~Passo 13~~ ✅ → ~~Passo 15~~ ✅
 
 Fase 5 — Infraestrutura para comercialização:
   Passo 18 → Passo 19 → Passo 20
