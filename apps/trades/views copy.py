@@ -788,6 +788,8 @@ def _grafico_ativos(df: pd.DataFrame) -> str:
         y=agrupado["ativo_grupo"].tolist(),
         orientation="h",
         marker_color=cores,
+        text=None,          
+        texttemplate=None,
         customdata=agrupado["n_ops"].tolist(),
         hovertemplate=(
             "<b>%{y}</b><br>"
@@ -805,15 +807,6 @@ def _grafico_ativos(df: pd.DataFrame) -> str:
 
     return _to_html(fig)
 
-    fig.update_layout(**_layout_base(
-        height=280,
-        margin=dict(l=10, r=30, t=10, b=10),  # r ampliado para texto externo
-        xaxis=dict(gridcolor=COR_GRADE, zerolinecolor=COR_GRADE,
-                   tickprefix="R$ ", tickformat=",.0f"),
-        yaxis=dict(gridcolor=COR_GRADE, showgrid=False),
-    ))
-
-    return _to_html(fig)
 
 def _grafico_heatmap(df: pd.DataFrame) -> str:
     if df.empty:

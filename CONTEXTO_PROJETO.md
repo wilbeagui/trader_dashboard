@@ -40,6 +40,7 @@ operacional.
 - Análise por Setup/Tag ← IMPLEMENTADO (Passo 10)
 - Correlação Overtrading × Revenge ← IMPLEMENTADO (Passo 11)
 - Comparativo de Períodos ← IMPLEMENTADO (Passo 12)
+- Volume por Ativo com Nº de Operações ← IMPLEMENTADO (Passo 13)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -542,7 +543,8 @@ Observações do trader sobre o pregão como um todo.
 2. Drawdown → _grafico_drawdown(df); área vermelha fill='tozeroy'; altura 160px;
    exibido abaixo da Curva de Capital no mesmo chart-card separado por <hr> (Passo 7)
 3. Resultado por Horário → barras verticais coloridas individualmente
-4. Resultado por Ativo → barras horizontais agrupadas por instrumento
+4. Resultado por Ativo → barras horizontais agrupadas por instrumento;
+   hover exibe resultado + nº de operações via customdata (Passo 13)
 5. Heat Map Dia × Horário → colorscale divergente, zmid=0, cor central #161b22
 
 ### Página Dia
@@ -851,9 +853,23 @@ portanto delta negativo exibe verde (consistente com a semântica financeira)
 
 ---
 
-### PASSO 13 — Volume por Ativo com Nº de Operações ★★★☆☆
-**Arquivos a alterar:**
-- `apps/trades/views.py` → _grafico_ativos(): count de operações + texttemplate + hover
+### PASSO 13 — Volume por Ativo com Nº de Operações ★★★☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- `_grafico_ativos()` refatorada: agrupamento via `.agg()` calculando
+  resultado (sum) e n_ops (count) em uma única operação
+- `customdata=agrupado["n_ops"].tolist()` — `.tolist()` obrigatório para
+  o Plotly indexar corretamente os valores por barra
+- `hovertemplate` atualizado: exibe resultado em R$ + nº de operações
+- Texto nas barras removido (opção C): eixo X já comunica escala/unidade;
+  hover fornece o detalhe completo; gráfico mais limpo sem redundância visual
+- Margem do layout mantida no padrão original via `_layout_base()`
+
+**Decisão de design:** textposition removido intencionalmente — eixo informa
+escala, cor informa direção, comprimento informa magnitude, hover informa detalhe.
+Cada elemento faz um trabalho, sem duplicação.
+
+**Arquivos alterados:** `apps/trades/views.py`
+**Sem migração de banco. Sem nova URL. Sem alteração de templates.**
 
 ---
 
@@ -942,7 +958,7 @@ Fase 3 — Visão de negócio:
   ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → Passo 16
 
 Fase 4 — Refinamentos comportamentais:
-  ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → Passo 13 → Passo 15
+  ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → ~~Passo 13~~ ✅ → Passo 15
 
 Fase 5 — Infraestrutura para comercialização:
   Passo 18 → Passo 19 → Passo 20
