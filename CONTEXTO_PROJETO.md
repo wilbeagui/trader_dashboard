@@ -43,7 +43,7 @@ operacional.
 - Volume por Ativo com Nº de Operações ← IMPLEMENTADO (Passo 13)
 - Score Comportamental Consolidado ← IMPLEMENTADO (Passo 14)
 - Histograma de Duração das Operações ← IMPLEMENTADO (Passo 15)
-- Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
+- Relatório exportável em PDF ← IMPLEMENTADO (Passo 16)
 
 ## Stack
 - Python 3.12.7 + Django 6.0.5
@@ -939,12 +939,32 @@ manter a sobreposição após entender a lógica de leitura do gráfico
 
 ---
 
-### PASSO 16 — Exportação PDF ★★★☆☆
-**Dependências:** pip install weasyprint (produção) ou window.print() (simples)
-**Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view exportar_pdf()
-- `apps/trades/urls.py` → rota /exportar-pdf/
-- `templates/trades/pdf_relatorio.html` → template otimizado para impressão
+### PASSO 16 — Exportação PDF: Relatório Mensal de Performance ★★★☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- Botão "Exportar PDF" na página /relatorio-mensal/ usando window.print()
+  com classe d-print-none para ocultar na impressão
+- CSS @media print dedicado no {% block extra_head %} de relatorio_mensal.html:
+  - Oculta: sidebar, topbar, filtros, botões, formulários
+  - Formata para A4: fundo branco, cores de resultado adaptadas para impressão
+    (#1a7a4a positivo / #c0392b negativo), fonte 11pt
+  - Cards de KPI: fundo #f8f9fa, borda #dee2e6, break-inside: avoid
+  - Tabela comparativa: fonte 8pt, cores adaptadas, linha do mês selecionado
+    em azul claro (#e8f4fd)
+  - Gráficos Plotly: fundo forçado para branco — impressos como SVG
+  - Rodapé automático: data de geração + mês + total de operações
+- Cabeçalho do relatório (d-none d-print-block): título "Relatório de
+  Performance", mês selecionado, data de geração via {% now "d/m/Y" %},
+  capital inicial se configurado
+- Rodapé impresso com {% now "d/m/Y H:i" %} e resumo do mês
+- Classe .print-footer: display:none por padrão, display:block no @media print
+
+**Decisão técnica:** window.print() escolhido sobre WeasyPrint por três razões:
+  1. Gráficos Plotly (SVG) são preservados nativamente pelo browser
+  2. WeasyPrint no Windows exige GTK/libcairo — fricção desnecessária
+  3. Chrome gera PDFs de alta qualidade; público-alvo usa Chrome no Windows
+
+**Arquivos alterados:** `templates/trades/relatorio_mensal.html`
+**Sem nova view. Sem nova URL. Sem migração. Sem dependência nova.**
 
 ---
 
@@ -996,6 +1016,54 @@ manter a sobreposição após entender a lógica de leitura do gráfico
 
 ---
 
+### PASSO 24 — Relatório Comportamental Periódico (PDF) ★★★☆☆
+**Objetivo:** Exportar PDF do relatório comportamental — o maior
+diferencial competitivo do app versus concorrentes no mercado brasileiro.
+
+**Seções do relatório:**
+- Score comportamental consolidado (0–100) com barra visual
+- Detalhamento por indicador: revenge, overtrading, MEP, MEN, consistência
+- Correlação overtrading × revenge com interpretação textual
+- Tabela de episódios de revenge do período
+- Histograma de duração das operações
+- Evolução do score comportamental mês a mês (quando houver histórico)
+
+**Diferencial competitivo:** nenhum app brasileiro focado em B3/Profitchart
+oferece análise comportamental exportável em PDF.
+
+**Arquivos a criar/alterar:**
+- `apps/trades/views.py` → nova view exportar_pdf_comportamental()
+- `apps/trades/urls.py` → rota /exportar-pdf/comportamental/
+- `templates/trades/pdf_relatorio_comportamental.html` → template para impressão
+
+---
+
+### PASSO 25 — Relatório Consolidado Anual (PDF) ★★★☆☆
+**Objetivo:** Documento anual completo com valor percebido alto —
+serve para análise pessoal e documentação fiscal (IR na B3).
+
+**Seções do relatório:**
+- Resumo do ano: resultado total, pontos, dias operados, win rate,
+  EM, drawdown máximo
+- Curva de capital anual
+- Tabela mensal comparativa (os 12 meses)
+- Melhores e piores meses
+- Evolução do score comportamental mês a mês
+- Análise por setup no acumulado do ano
+- Top 5 melhores e piores dias
+- Tabela completa de operações (para fins de IR)
+
+**Diferencial competitivo:** traders de mini-índice via Profitchart não
+têm hoje nenhuma ferramenta que consolide o ano em PDF organizado —
+funcionalidade premium de alto valor percebido, especialmente para IR.
+
+**Arquivos a criar/alterar:**
+- `apps/trades/views.py` → nova view exportar_pdf_anual()
+- `apps/trades/urls.py` → rota /exportar-pdf/anual/
+- `templates/trades/pdf_relatorio_anual.html` → template para impressão
+
+---
+
 ### ORDEM DE EXECUÇÃO RECOMENDADA
 
 Fase 1 — Fundação analítica:
@@ -1005,7 +1073,7 @@ Fase 2 — Diferencial competitivo:
   ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → ~~Passo 10~~ ✅ → ~~Passo 14~~ ✅ → ~~Passo 17~~ ✅
 
 Fase 3 — Visão de negócio:
-  ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → Passo 16
+  ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → ~~Passo 16~~ ✅ → Passo 24 → Passo 25
 
 Fase 4 — Refinamentos comportamentais:
   ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → ~~Passo 13~~ ✅ → ~~Passo 15~~ ✅
