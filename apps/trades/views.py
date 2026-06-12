@@ -528,6 +528,89 @@ def _calcular_comportamental(df: pd.DataFrame, params: ParametrosTrader) -> dict
     # ── Gráfico Consistência: resultado diário ──────────────────────
     grafico_consistencia = _grafico_consistencia(ops_por_dia)
 
+    # ── Score Comportamental Consolidado (Passo 14) ────────────────
+    # Cada indicador contribui 0–20 pontos → total 0–100
+
+    # 1. Revenge
+    if revenge_avaliacao == "Nenhum":
+        score_revenge = 20
+    elif revenge_avaliacao == "Baixo":
+        score_revenge = 15
+    elif revenge_avaliacao == "Moderado":
+        score_revenge = 8
+    else:  # Alto
+        score_revenge = 0
+
+    # 2. Overtrading
+    if n_overtrading == 0:
+        score_overtrading = 20
+    elif n_overtrading <= 2:
+        score_overtrading = 15
+    elif n_overtrading <= 5:
+        score_overtrading = 8
+    else:
+        score_overtrading = 0
+
+    # 3. MEP
+    if aprov_medio is None:
+        score_mep = 0
+    elif aprov_medio >= 70:
+        score_mep = 20
+    elif aprov_medio >= 40:
+        score_mep = 12
+    elif aprov_medio >= 20:
+        score_mep = 6
+    else:
+        score_mep = 0
+
+    # 4. MEN
+    if men_razao_media is None:
+        score_men = 0
+    elif men_razao_media <= 110:
+        score_men = 20
+    elif men_razao_media <= 150:
+        score_men = 12
+    elif men_razao_media <= 200:
+        score_men = 6
+    else:
+        score_men = 0
+
+    # 5. Consistência
+    if pct_dias_positivos >= 60:
+        score_consistencia = 20
+    elif pct_dias_positivos >= 40:
+        score_consistencia = 12
+    elif pct_dias_positivos >= 20:
+        score_consistencia = 6
+    else:
+        score_consistencia = 0
+
+    score_comportamental = (
+        score_revenge + score_overtrading + score_mep
+        + score_men + score_consistencia
+    )
+
+    score_detalhes = [
+        {"label": "Revenge Trading",   "pontos": score_revenge,      "max": 20},
+        {"label": "Overtrading",        "pontos": score_overtrading,  "max": 20},
+        {"label": "Aproveitamento MEP", "pontos": score_mep,          "max": 20},
+        {"label": "Gestão de Stop",     "pontos": score_men,          "max": 20},
+        {"label": "Consistência",       "pontos": score_consistencia, "max": 20},
+    ]
+
+    if score_comportamental >= 80:
+        score_avaliacao = "Excelente"
+        score_cor = "pos"
+    elif score_comportamental >= 60:
+        score_avaliacao = "Bom"
+        score_cor = "pos"
+    elif score_comportamental >= 40:
+        score_avaliacao = "Regular"
+        score_cor = "warn"
+    else:
+        score_avaliacao = "Crítico"
+        score_cor = "neg"
+
     return {
         "sem_dados": False,
         # parâmetros ativos (para exibir no template)
@@ -567,6 +650,11 @@ def _calcular_comportamental(df: pd.DataFrame, params: ParametrosTrader) -> dict
         "sequencia_atual":       sequencia_atual,
         "sequencia_tipo":        sequencia_tipo,
         "grafico_consistencia":  grafico_consistencia,
+        # Score Comportamental Consolidado (Passo 14)
+        "score_comportamental": score_comportamental,
+        "score_avaliacao":      score_avaliacao,
+        "score_cor":            score_cor,
+        "score_detalhes":       score_detalhes,
     }
 
 

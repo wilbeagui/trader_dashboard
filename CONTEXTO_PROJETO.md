@@ -41,6 +41,7 @@ operacional.
 - Correlação Overtrading × Revenge ← IMPLEMENTADO (Passo 11)
 - Comparativo de Períodos ← IMPLEMENTADO (Passo 12)
 - Volume por Ativo com Nº de Operações ← IMPLEMENTADO (Passo 13)
+- Score Comportamental Consolidado ← IMPLEMENTADO (Passo 14)
 - Relatório exportável em PDF ← PLANEJADO (ver Próximos Passos)
 
 ## Stack
@@ -242,7 +243,7 @@ Observações do trader sobre o pregão como um todo.
   atualizado_em), list_filter por estado_emocional, ordering por -data_sessao
 - `apps/trades/views.py` → 9 views ativas + helpers de cálculo e gráficos;
   inclui _grafico_drawdown(df) adicionado no Passo 7;
-  _calcular_comportamental() atualizado nos Passos 8 e 11;
+  _calcular_comportamental() atualizado nos Passos 8, 11 e 14;
   _grafico_analise_setup/tag() e analise_setup() adicionados no Passo 10;
   _grafico_comparativo_curvas/barras() e comparativo() adicionados no Passo 12
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
@@ -574,6 +575,9 @@ Observações do trader sobre o pregão como um todo.
 - Análise por Setup/Tag → analise_setup(); EM, payoff, qualidade por setup e tag (Passo 10)
 - Correlação Overtrading × Revenge → Pearson por dia; % revenge em dias normais vs overtrade (Passo 11)
 - Comparativo de Períodos → comparativo(); delta por métrica; curvas sobrepostas normalizadas (Passo 12)
+- Score Comportamental Consolidado → _calcular_comportamental(); nota 0–100
+  combinando 5 indicadores (20 pts cada): revenge, overtrading, MEP, MEN,
+  consistência; avaliação: Excelente ≥80, Bom ≥60, Regular ≥40, Crítico <40 (Passo 14)
 
 ## Indicadores comportamentais implementados
 1. Revenge Trading — limiar: tempo_minimo_entre_trades; avaliação relativa via
@@ -873,12 +877,30 @@ Cada elemento faz um trabalho, sem duplicação.
 
 ---
 
-### PASSO 14 — Score Comportamental Consolidado ★★★☆☆
-**Objetivo:** nota única 0–100 combinando os 5 indicadores comportamentais.
+### PASSO 14 — Score Comportamental Consolidado ★★★☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- Bloco de cálculo adicionado no final de `_calcular_comportamental()`,
+  antes do return, sem alterar nenhum indicador já existente
+- Cada um dos 5 indicadores contribui com 0–20 pontos → total 0–100:
+  - Revenge: Nenhum=20, Baixo=15, Moderado=8, Alto=0
+  - Overtrading: 0 dias=20, 1-2=15, 3-5=8, >5=0
+  - MEP: ≥70%=20, ≥40%=12, ≥20%=6, <20% ou None=0
+  - MEN: ≤110%=20, ≤150%=12, ≤200%=6, >200% ou None=0
+  - Consistência: ≥60% dias pos=20, ≥40%=12, ≥20%=6, <20%=0
+- Avaliação: Excelente ≥80 / Bom ≥60 / Regular ≥40 / Crítico <40
+- 4 novas chaves no return: score_comportamental, score_avaliacao,
+  score_cor, score_detalhes (lista com label/pontos/max por indicador)
+- Card no topo de `comportamental.html` (antes da seção 1):
+  - KPI com nota em fonte 36px e avaliação textual
+  - Barra de progresso geral com escala 0/40/60/80/100
+  - Detalhamento por indicador com mini-barra individual e pontuação X/20
+  - Cores: positivo ≥16pts, warning ≥8pts, negativo <8pts por indicador
+- `{% widthratio %}` usado para calcular % das barras — tag nativa Django,
+  sem dependência extra
 
-**Arquivos a alterar:**
-- `apps/trades/views.py` → _calcular_comportamental(): score 0-20 por indicador
-- `templates/trades/comportamental.html` → card de score com barra de progresso
+**Arquivos alterados:** `apps/trades/views.py`,
+`templates/trades/comportamental.html`
+**Sem migração de banco. Sem nova URL.**
 
 ---
 
@@ -952,7 +974,7 @@ Fase 1 — Fundação analítica:
   ~~Passo 1~~ ✅ → ~~Passo 2~~ ✅ → ~~Passo 3~~ ✅ → ~~Passo 7~~ ✅ → ~~Passo 9~~ ✅
 
 Fase 2 — Diferencial competitivo:
-  ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → ~~Passo 10~~ ✅ → Passo 14 → ~~Passo 17~~ ✅
+  ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → ~~Passo 10~~ ✅ → ~~Passo 14~~ ✅ → ~~Passo 17~~ ✅
 
 Fase 3 — Visão de negócio:
   ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → Passo 16
