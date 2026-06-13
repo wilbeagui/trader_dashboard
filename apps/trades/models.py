@@ -172,6 +172,21 @@ class ParametrosTrader(models.Model):
         default=0
     )
 
+    meta_resultado_mensal = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Meta de resultado mensal (R$)',
+        help_text='Meta de resultado financeiro para o mês corrente. 0 = sem meta.',
+    )
+    drawdown_maximo_permitido = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Drawdown máximo permitido (R$)',
+        help_text='Alerta disparado quando o drawdown do período superar este valor. 0 = sem limite.',
+    )
+
     class Meta:
         verbose_name = 'Parâmetros do Trader'
         verbose_name_plural = 'Parâmetros do Trader'

@@ -45,6 +45,7 @@ operacional.
 - Histograma de Duração das Operações ← IMPLEMENTADO (Passo 15)
 - Relatório exportável em PDF ← IMPLEMENTADO (Passo 16)
 - Multi-usuário e Autenticação ← IMPLEMENTADO (Passo 18 — Abordagem A)
+- Metas e Alertas ← IMPLEMENTADO (Passo 20)
 
 ## Stack
 - Python 3.12.7 + Django 6.0.5
@@ -187,8 +188,8 @@ Preparado para futura migração a multi-usuário (adicionar FK User).
 - `tempo_minimo_entre_trades` → IntegerField(default=2)
 - `max_operacoes_dia`         → IntegerField(default=5)
 - `capital_inicial`           → DecimalField(12,2, default=0) ← ADICIONADO (Passo 2)
-- `meta_resultado_mensal`     → DecimalField(10,2, default=0) ← A ADICIONAR (Passo 20)
-- `drawdown_maximo_permitido` → DecimalField(10,2, default=0) ← A ADICIONAR (Passo 20)
+- `meta_resultado_mensal`     → DecimalField(10,2, default=0) ← ADICIONADO (Passo 20)
+- `drawdown_maximo_permitido` → DecimalField(10,2, default=0) ← ADICIONADO (Passo 20)
 - Meta.verbose_name = "Parâmetros do Trader"
 - save() força pk=1 (singleton); delete() bloqueado
 - classmethod carregar() → get_or_create(pk=1)
@@ -233,11 +234,14 @@ Observações do trader sobre o pregão como um todo.
 - `manage.py` → aponta para core.settings.development
 - `apps/trades/models.py` → 6 models ativos (Operacao atualizado no Passo 3;
   JournalOperacao implementado; ParametrosTrader atualizado;
-  AnotacaoDia implementado no Passo 6)
+  AnotacaoDia implementado no Passo 6);
+  ParametrosTrader atualizado (Passo 20):
+  meta_resultado_mensal e drawdown_maximo_permitido adicionados
 - `apps/trades/migrations/0001_initial.py` → migração inicial
 - `apps/trades/migrations/0002_parametrostrader.py` → migração ParametrosTrader
 - `apps/trades/migrations/0003_journaloperacao.py` → migração JournalOperacao (Passo 1)
-- `apps/trades/migrations/0004_parametrostrader_capital_inicial.py` → migração capital_inicial (Passo 2)
+- `apps/trades/migrations/0004_parametrostrader_capital_inicial.py` → migração capital_inicial (Passo 2);
+nova migração gerada pelo makemigrations (Passo 20);
 - `apps/trades/migrations/0005_operacao_passo3.py` → migração Passo 3: remove campos
   obsoletos, renomeia resultado_intervalo_pontos → resultado_operacao_pontos
 - `apps/trades/migrations/0006_anotacaodia.py` → migração Passo 6: cria model AnotacaoDia
@@ -246,13 +250,17 @@ Observações do trader sobre o pregão como um todo.
   impede criação de segundo registro e impede exclusão;
   JournalOperacaoAdmin com filtros por emocao e setup;
   AnotacaoDiaAdmin com list_display (data_sessao, estado_emocional, score_dia,
-  atualizado_em), list_filter por estado_emocional, ordering por -data_sessao
+  atualizado_em), list_filter por estado_emocional, ordering por -data_sessao;
+  ParametrosTraderAdmin: fieldset renomeado para
+  "Capital e Metas" incluindo meta_resultado_mensal e drawdown_maximo_permitido;
 - `apps/trades/views.py` → 10 views ativas protegidas com @login_required
   (Passo 18); + helpers de cálculo e gráficos;
   inclui _grafico_drawdown(df) adicionado no Passo 7;
   _calcular_comportamental() atualizado nos Passos 8, 11 e 14;
   _grafico_analise_setup/tag() e analise_setup() adicionados no Passo 10;
-  _grafico_comparativo_curvas/barras() e comparativo() adicionados no Passo 12
+  _grafico_comparativo_curvas/barras() e comparativo() adicionados no Passo 12;
+  dashboard(): bloco de Metas e Alertas adicionado;
+  from datetime import datetime corrigido (era import datetime);
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
   /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/,
@@ -266,7 +274,9 @@ Observações do trader sobre o pregão como um todo.
 - `templates/trades/dashboard.html` → filter bar; 2 linhas de cards (linha 1:
   Resultado Total com subtítulo pts, Win Rate, Retorno %, Drawdown Máx.;
   linha 2: Operações, Wins/Losses, EM, Payoff Ratio); 5 gráficos Plotly
-  (Curva de Capital + Drawdown no mesmo chart-card, Horário, Ativos, Heat Map)
+  (Curva de Capital + Drawdown no mesmo chart-card, Horário, Ativos, Heat Map);
+  banner de alerta de drawdown +
+  card de progresso da meta mensal com barra visual (Passo 20);
 - `templates/trades/dia.html` → 4 linhas de KPIs; card Anotação do Pregão (Passo 6);
   3 gráficos; tabela com coluna Pts; card Win Rate atualizado no Passo 9:
   cor baseada em payoff_ratio_dia >= 1 (verde) com fallback para win_rate >= 50
@@ -1031,11 +1041,43 @@ Ideal para fase de comercialização inicial com um usuário por instalação.
 
 ---
 
-### PASSO 20 — Metas e Alertas ★★☆☆☆
-**Arquivos a alterar:**
-- `apps/trades/models.py` → meta_resultado_mensal, drawdown_maximo_permitido
-- `apps/trades/views.py` → dashboard(): progresso_meta, alerta_drawdown
-- `templates/trades/dashboard.html` → barra de progresso + banner de alerta
+### PASSO 20 — Metas e Alertas ★★☆☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- 2 campos novos em `ParametrosTrader`:
+  - `meta_resultado_mensal` → meta financeira mensal em R$; 0 = sem meta
+  - `drawdown_maximo_permitido` → limite de drawdown em R$; 0 = sem limite
+- Migração gerada via makemigrations + migrate
+- `ParametrosTraderAdmin`: fieldset renomeado para "Capital e Metas"
+- `dashboard()` — bloco de cálculo (Passo 20):
+  - Resultado do mês atual calculado via query independente do filtro:
+    abertura__gte/lte do primeiro ao último dia do mês corrente
+  - Conversão para UTC antes da query (TZ_BR → utc via .astimezone())
+  - progresso_meta_pct: resultado_mes_atual / meta_mensal × 100;
+    None se meta_mensal == 0; mínimo 0 (barra nunca negativa)
+  - alerta_drawdown: True quando drawdown_limite > 0 e
+    drawdown_max >= drawdown_limite
+  - 5 novas chaves no context: meta_mensal, resultado_mes_atual,
+    progresso_meta_pct, drawdown_limite, alerta_drawdown
+- `dashboard.html` — dois blocos entre filter bar e cards:
+  - Banner vermelho de alerta de drawdown (alert-dash alert-danger);
+    exibe drawdown atual vs limite configurado; só aparece quando
+    alerta_drawdown é True
+  - Card de progresso da meta mensal com barra visual 8px:
+    cor vermelha < 50%, amarela < 100%, verde >= 100%;
+    exibe resultado atual / meta / percentual; mensagem "Meta atingida!"
+    ou "Faltam R$ X"; só aparece quando progresso_meta_pct is not None
+
+**Decisão de design:** meta calculada sempre sobre o mês corrente,
+independente do filtro de período — o trader pode filtrar qualquer
+intervalo sem afetar a exibição da meta mensal.
+
+**Bug corrigido:** `import datetime` no topo de views.py causava
+AttributeError ao chamar `datetime.now()` — corrigido para
+`from datetime import datetime`.
+
+**Arquivos alterados:** `apps/trades/models.py`, `apps/trades/admin.py`,
+`apps/trades/views.py`, `templates/trades/dashboard.html`
+**Migração necessária:** sim — makemigrations + migrate
 
 ---
 
@@ -1122,7 +1164,7 @@ Fase 4 — Refinamentos comportamentais:
   ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → ~~Passo 13~~ ✅ → ~~Passo 15~~ ✅
 
 Fase 5 — Infraestrutura para comercialização:
-  ~~Passo 18~~ ✅ → Passo 19 → Passo 20
+  ~~Passo 18~~ ✅ → Passo 19 → ~~Passo 20~~ ✅
 
 Fase 6 — Experiência e conveniência:
   Passo 21 → Passo 22 → Passo 23

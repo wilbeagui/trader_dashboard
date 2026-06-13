@@ -35,8 +35,12 @@ class ParametrosTraderAdmin(admin.ModelAdmin):
         ('Limites Operacionais', {
             'fields': ['tempo_minimo_entre_trades', 'max_operacoes_dia']
         }),
-        ('Capital', {
-            'fields': ['capital_inicial']
+        ('Capital e Metas', {
+            'fields': (
+                'capital_inicial',
+                'meta_resultado_mensal',
+                'drawdown_maximo_permitido',
+            )
         }),
     ]
 

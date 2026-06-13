@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 import numpy as np
 
 import json
 
-import datetime
+from datetime import datetime 
 import pandas as pd
 import plotly.graph_objects as go
 import pytz
@@ -14,6 +15,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.db.models import QuerySet
 from django.shortcuts import render, redirect, get_object_or_404
+from django.db.models import Sum
 
 from .models import (ImportacaoArquivo, Operacao,
                      ParametrosTrader, SessaoOperacao,
@@ -1337,6 +1339,40 @@ def dashboard(request):
         retorno_pct = None
         drawdown_pct = None
 
+# ── Metas e Alertas (Passo 20) ─────────────────────────────────
+    meta_mensal = float(params.meta_resultado_mensal)
+    drawdown_limite = float(params.drawdown_maximo_permitido)
+
+    # Resultado do mês atual (independente do filtro)
+    import calendar
+    hoje = datetime.now(tz=TZ_BR)
+    primeiro_dia_mes = hoje.replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0)
+    ultimo_dia_mes = hoje.replace(
+        day=calendar.monthrange(hoje.year, hoje.month)[1],
+        hour=23, minute=59, second=59
+    )
+    resultado_mes_atual = float(
+        Operacao.objects.filter(
+            abertura__gte=primeiro_dia_mes.astimezone(pytz.utc),
+            abertura__lte=ultimo_dia_mes.astimezone(pytz.utc),
+        ).aggregate(total=Sum('resultado_operacao'))['total'] or 0
+    )
+
+    # Progresso da meta (None se meta não configurada)
+    if meta_mensal > 0:
+        progresso_meta_pct = round(resultado_mes_atual / meta_mensal * 100, 1)
+        # nunca negativo na barra
+        progresso_meta_pct = max(progresso_meta_pct, 0)
+    else:
+        progresso_meta_pct = None
+
+    # Alerta de drawdown
+    alerta_drawdown = (
+        drawdown_limite > 0 and drawdown_max >= drawdown_limite
+    )
+    # ───────────────────────────────────────────────────────────────
+
     metricas_av = _calcular_metricas_avancadas(df)
 
     context = {
@@ -1368,6 +1404,12 @@ def dashboard(request):
         "grafico_heatmap":  _grafico_heatmap(df),
         # Passo 7
         "grafico_drawdown": grafico_drawdown,
+        # Metas e Alertas (Passo 20)
+        "meta_mensal":          meta_mensal,
+        "resultado_mes_atual":  round(resultado_mes_atual, 2),
+        "progresso_meta_pct":   progresso_meta_pct,
+        "drawdown_limite":      drawdown_limite,
+        "alerta_drawdown":      alerta_drawdown,
     }
     return render(request, "trades/dashboard.html", context)
 

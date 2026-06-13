@@ -41,6 +41,68 @@
   </div>
 </form>
 
+
+<!-- ── Banners de Meta e Alerta (Passo 20) ── -->
+
+{% if alerta_drawdown %}
+<div class="alert-dash alert-danger mb-3" style="display:flex;align-items:center;gap:12px;">
+  <i class="bi bi-exclamation-triangle-fill" style="font-size:18px;flex-shrink:0;"></i>
+  <div>
+    <strong>Alerta de Drawdown</strong> —
+    O drawdown do período (R$ {{ drawdown_max|floatformat:2 }}) atingiu o limite
+    configurado de R$ {{ drawdown_limite|floatformat:2 }}.
+    Considere encerrar as operações do dia.
+  </div>
+</div>
+{% endif %}
+
+{% if progresso_meta_pct is not None %}
+<div class="chart-card mb-3" style="padding:14px 18px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-muted);">
+      <i class="bi bi-trophy me-1"></i>Meta Mensal —
+      <span style="font-family:var(--font-mono);">
+        {% now "F/Y" %}
+      </span>
+    </div>
+    <div style="font-family:var(--font-mono);font-size:12px;">
+      <span class="{% if resultado_mes_atual >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        {% if resultado_mes_atual >= 0 %}+{% endif %}R$ {{ resultado_mes_atual|floatformat:2 }}
+      </span>
+      <span style="color:var(--text-muted);"> / R$ {{ meta_mensal|floatformat:2 }}</span>
+      <span style="color:var(--text-muted);margin-left:8px;">·</span>
+      <span class="{% if progresso_meta_pct >= 100 %}val-pos{% elif progresso_meta_pct >= 50 %}val-warn{% else %}val-neg{% endif %}"
+            style="margin-left:8px;font-weight:700;">
+        {{ progresso_meta_pct|floatformat:1 }}%
+      </span>
+    </div>
+  </div>
+
+  <!-- Barra de progresso -->
+  <div style="background:var(--bg-input);border-radius:6px;height:8px;overflow:hidden;">
+    <div style="
+      height:100%;
+      width:{% if progresso_meta_pct > 100 %}100{% else %}{{ progresso_meta_pct|floatformat:0 }}{% endif %}%;
+      border-radius:6px;
+      background:{% if progresso_meta_pct >= 100 %}var(--positive){% elif progresso_meta_pct >= 50 %}var(--warning){% else %}var(--negative){% endif %};
+      transition:width .4s ease;
+    "></div>
+  </div>
+
+  {% if progresso_meta_pct >= 100 %}
+  <div style="font-size:11px;color:var(--positive);margin-top:6px;font-family:var(--font-mono);">
+    <i class="bi bi-check-circle me-1"></i>Meta atingida no mês!
+  </div>
+  {% else %}
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;font-family:var(--font-mono);">
+    Faltam R$ {{ meta_mensal|floatformat:2 }} — R$ {{ resultado_mes_atual|floatformat:2 }} para atingir a meta
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+
 <!-- ── Cards de Métricas — linha 1 ── -->
 <div class="row g-3 mb-3">
 
