@@ -61,6 +61,7 @@ operacional.
   tabela comparativa mensal com score; top 5 melhores/piores dias;
   card de score anual com detalhamento por indicador; CSS @media print
   integrado; cabeçalho e rodapé de impressão (Passo 25)
+- Linha do Tempo Visual do Dia ← IMPLEMENTADO (Passo 21)
 
 ## Stack
 - Python 3.12.7 + Django 6.0.5
@@ -276,6 +277,8 @@ nova migração gerada pelo makemigrations (Passo 20);
   _grafico_comparativo_curvas/barras() e comparativo() adicionados no Passo 12;
   dashboard(): bloco de Metas e Alertas adicionado;
   from datetime import datetime corrigido (era import datetime);
+  novo helper _grafico_timeline_dia(df);
+  dia(): chave grafico_timeline adicionada ao context (Passo 21)
 - `apps/trades/urls.py` → namespace='trades'; rotas ativas:
   / (dashboard), /operacoes/, /importar/, /dia/, /comportamental/,
   /journal/, /journal/salvar/<op_id>/, /relatorio-mensal/,
@@ -294,7 +297,10 @@ nova migração gerada pelo makemigrations (Passo 20);
   card de progresso da meta mensal com barra visual (Passo 20);
 - `templates/trades/dia.html` → 4 linhas de KPIs; card Anotação do Pregão (Passo 6);
   3 gráficos; tabela com coluna Pts; card Win Rate atualizado no Passo 9:
-  cor baseada em payoff_ratio_dia >= 1 (verde) com fallback para win_rate >= 50
+  cor baseada em payoff_ratio_dia >= 1 (verde) com fallback para win_rate >= 50;
+  card "Linha do Tempo do Pregão" inserido
+  antes dos gráficos existentes; renderização condicional com
+  {% if grafico_timeline %} (Passo 21)
 - `templates/trades/importar.html` → upload drag-and-drop + exclusão por data/ativo
 - `templates/trades/operacoes.html` → listagem com filtros, paginação, 4 cards;
   coluna Pts na tabela; coluna Journal com botão por linha; offcanvas drawer Bootstrap
@@ -592,6 +598,12 @@ nova migração gerada pelo makemigrations (Passo 20);
 1. Curva de Capital intraday → mesma lógica dashboard; HH:MM; markers nos pontos
 2. Resultado por Horário → barras por HH:MM
 3. Análise de Execução → MEP/MEN/Resultado; barras horizontais; altura dinâmica
+4. Linha do Tempo do Pregão → Gantt horizontal via go.Bar com base=;
+   cada bloco = uma operação; posição X em minutos desde meia-noite;
+   largura proporcional à duração (mínimo visual 1 min); cor verde/vermelho
+   com borda sólida e preenchimento soft; texto interno quando duração >= 3 min;
+   hover com ativo, abertura, fechamento, duração, resultado, pontos;
+   eixo X 09:00–18:00 com ticks de hora em hora; altura 110px (Passo 21)
 
 ### Página Relatório Mensal
 1. Resultado por Mês → barras verticais coloridas individualmente; tickprefix R$
@@ -1100,10 +1112,31 @@ AttributeError ao chamar `datetime.now()` — corrigido para
 
 ---
 
-### PASSO 21 — Linha do Tempo Visual do Dia ★★☆☆☆
-**Arquivos a alterar:**
-- `apps/trades/views.py` → dia(): dados de timeline por operação
-- `templates/trades/dia.html` → SVG/CSS com blocos proporcionais ao tempo
+### PASSO 21 — Linha do Tempo Visual do Dia ★★☆☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- Helper `_grafico_timeline_dia(df)`: Gantt horizontal via go.Bar com
+  orientation="h" e base= para posicionamento pelo horário de abertura
+- Eixo X em minutos desde meia-noite: abertura.hour*60 + abertura.minute
+  + abertura.second/60; permite posicionamento preciso dentro do pregão
+- Duração visual mínima de 1 minuto via .clip(lower=1.0) — operações de
+  segundos ficam visíveis sem distorcer o eixo
+- Estilo dos blocos: preenchimento soft (rgba com 0.15 de opacidade) +
+  borda sólida na cor principal (COR_POSITIVO/COR_NEGATIVO); texto
+  interno "R$+131" quando duracao_vis >= 3 min
+- Hover completo: ativo, abertura HH:MM:SS, fechamento HH:MM:SS,
+  duração em minutos, resultado R$, pontos
+- Layout: eixo X range 540–1080 (09:00–18:00), ticks de hora em hora,
+  eixo Y oculto (showticklabels=False), altura 110px, barmode="overlay"
+- Card inserido em dia.html antes dos gráficos existentes com subtítulo
+  explicativo: "cada bloco = uma operação · largura proporcional à duração"
+
+**Decisão técnica:** Plotly go.Bar horizontal com base= escolhido sobre
+SVG puro — implementação mais rápida, hover nativo, consistente com os
+outros gráficos do projeto.
+
+**Arquivos alterados:** `apps/trades/views.py`,
+`templates/trades/dia.html`
+**Sem migração de banco. Sem nova URL. Sem dependência nova.**
 
 ---
 
@@ -1210,4 +1243,4 @@ Fase 5 — Infraestrutura para comercialização:
   ~~Passo 18~~ ✅ → Passo 19 → ~~Passo 20~~ ✅
 
 Fase 6 — Experiência e conveniência:
-  Passo 21 → Passo 22 → Passo 23
+  ~~Passo 21~~ ✅ → Passo 22 → Passo 23

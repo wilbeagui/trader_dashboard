@@ -1121,6 +1121,101 @@ def _grafico_execucao(df: pd.DataFrame) -> str:
     return _to_html(fig)
 
 
+def _grafico_timeline_dia(df: pd.DataFrame) -> str:
+    """
+    Linha do tempo horizontal do pregão.
+    Cada operação é um bloco posicionado pelo horário de abertura,
+    com largura proporcional à duração em minutos.
+    """
+    if df.empty:
+        return ""
+
+    df = df.copy()
+    df["fechamento_local"] = pd.to_datetime(
+        df["fechamento"], utc=True).dt.tz_convert(TZ_BR)
+    df["duracao_min"] = (
+        df["fechamento_local"] - df["abertura"]
+    ).dt.total_seconds() / 60
+
+    # Duração mínima visual de 1 minuto para operações muito rápidas
+    df["duracao_vis"] = df["duracao_min"].clip(lower=1.0)
+
+    # Eixo X em minutos desde meia-noite para posicionamento preciso
+    def minutos(ts):
+        return ts.hour * 60 + ts.minute + ts.second / 60
+
+    df["x_inicio"] = df["abertura"].apply(minutos)
+    df["x_fim"] = df["x_inicio"] + df["duracao_vis"]
+
+    fig = go.Figure()
+
+    for _, row in df.iterrows():
+        is_win = row["resultado_operacao"] > 0
+        cor = COR_POSITIVO if is_win else COR_NEGATIVO
+        cor_soft = "rgba(63,182,139,0.15)" if is_win else "rgba(224,92,92,0.15)"
+        resultado = row["resultado_operacao"]
+        pts = row.get("resultado_operacao_pontos", 0)
+        duracao = row["duracao_min"]
+        abertura = row["abertura"].strftime("%H:%M:%S")
+        fechamento = row["fechamento_local"].strftime("%H:%M:%S")
+
+        # Texto dentro do bloco (só se duração visual >= 3 min)
+        texto = f"R${resultado:+.0f}" if row["duracao_vis"] >= 3 else ""
+
+        fig.add_trace(go.Bar(
+            x=[row["duracao_vis"]],
+            y=["Pregão"],
+            base=[row["x_inicio"]],
+            orientation="h",
+            marker=dict(
+                color=cor_soft,
+                line=dict(color=cor, width=2),
+            ),
+            text=texto,
+            textposition="inside",
+            insidetextanchor="middle",
+            textfont=dict(size=10, color=cor, family="JetBrains Mono"),
+            hovertemplate=(
+                f"<b>{row['ativo']}</b><br>"
+                f"Abertura: {abertura}<br>"
+                f"Fechamento: {fechamento}<br>"
+                f"Duração: {duracao:.1f} min<br>"
+                f"Resultado: R$ {resultado:+.2f}<br>"
+                f"Pontos: {pts:+.0f}"
+                "<extra></extra>"
+            ),
+            showlegend=False,
+        ))
+
+    # Intervalo do eixo X: 09:00 (540 min) até 18:00 (1080 min)
+    x_min = 540
+    x_max = 1080
+
+    # Ticks de hora em hora
+    tick_vals = list(range(x_min, x_max + 1, 60))
+    tick_text = [f"{v // 60:02d}:00" for v in tick_vals]
+
+    fig.update_layout(**_layout_base(
+        height=70, # Altura da barra
+        barmode="overlay",
+        xaxis=dict(
+            range=[x_min, x_max],
+            tickvals=tick_vals,
+            ticktext=tick_text,
+            tickfont=dict(size=9),
+            gridcolor=COR_GRADE,
+            showgrid=True,
+        ),
+        yaxis=dict(
+            showticklabels=False,
+            showgrid=False,
+        ),
+        margin=dict(l=10, r=10, t=8, b=30),
+    ))
+
+    return _to_html(fig)
+
+
 # ──────────────────────────────────────────────
 # Gráficos — analise_setup()
 # ──────────────────────────────────────────────
@@ -1806,6 +1901,7 @@ def dia(request):
         "grafico_capital":  _grafico_capital_dia(df),
         "grafico_horario":  _grafico_horario_dia(df),
         "grafico_execucao": _grafico_execucao(df),
+        "grafico_timeline": _grafico_timeline_dia(df),
         "operacoes":        tabela,
         # Passo 6 — Anotação do Dia
         "anotacao_dia":        anotacao_dia,

@@ -381,6 +381,19 @@
   </form>
 </div>
 
+<!-- ── Linha do Tempo do Pregão (Passo 21) ── -->
+{% if grafico_timeline %}
+<div class="chart-card mb-3">
+  <div class="chart-title" style="margin-bottom:4px;">
+    <i class="bi bi-clock-history me-1"></i>Linha do Tempo do Pregão
+  </div>
+  <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;font-family:var(--font-mono);">
+    cada bloco = uma operação · largura proporcional à duração · passe o mouse para detalhes
+  </div>
+  {{ grafico_timeline|safe }}
+</div>
+{% endif %}
+
 <!-- ══ Curva de Capital ══ -->
 <div class="chart-card mb-3">
   <div class="chart-title">
