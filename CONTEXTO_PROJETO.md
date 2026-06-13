@@ -1136,28 +1136,34 @@ do template em um único lugar.
 ---
 
 ### PASSO 25 — Relatório Consolidado Anual (PDF) ★★★☆☆
-**Objetivo:** Documento anual completo com valor percebido alto —
-serve para análise pessoal e documentação fiscal (IR na B3).
+**Objetivo:** Documento anual completo de performance — serve para
+análise pessoal, planejamento e evolução. NÃO inclui cálculo de taxas,
+corretagem ou DARF — para fins fiscais o trader deve consultar as notas
+de corretagem emitidas pela corretora.
 
 **Seções do relatório:**
-- Resumo do ano: resultado total, pontos, dias operados, win rate,
-  EM, drawdown máximo
+- Cabeçalho com ano, capital inicial e instrumento operado
+- Resumo do ano: resultado bruto total, pontos, dias operados,
+  win rate, EM, drawdown máximo
 - Curva de capital anual
-- Tabela mensal comparativa (os 12 meses)
+- Tabela mensal comparativa (os 12 meses com deltas)
 - Melhores e piores meses
-- Evolução do score comportamental mês a mês
-- Análise por setup no acumulado do ano
-- Top 5 melhores e piores dias
-- Tabela completa de operações (para fins de IR)
+- Evolução do score comportamental mês a mês (quando houver dados)
+- Análise por setup no acumulado do ano (quando houver journal)
+- Top 5 melhores e piores dias do ano
+- Exportação via window.print() — mesmo padrão dos Passos 16 e 24
 
-**Diferencial competitivo:** traders de mini-índice via Profitchart não
-têm hoje nenhuma ferramenta que consolide o ano em PDF organizado —
-funcionalidade premium de alto valor percebido, especialmente para IR.
+**Nota sobre dados fiscais:** o CSV do Profitchart contém apenas
+resultados brutos de execução — sem taxas, corretagem ou emolumentos
+da B3. Qualquer cálculo de resultado líquido ou DARF requereria
+integração com as notas de corretagem da corretora, fora do escopo
+atual do app.
 
 **Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view exportar_pdf_anual()
-- `apps/trades/urls.py` → rota /exportar-pdf/anual/
-- `templates/trades/pdf_relatorio_anual.html` → template para impressão
+- `apps/trades/views.py` → nova view relatorio_anual()
+- `apps/trades/urls.py` → rota /relatorio-anual/
+- `templates/trades/relatorio_anual.html` → template com @media print
+- `templates/base.html` → link no sidebar
 
 ---
 
