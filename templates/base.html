@@ -463,6 +463,10 @@
         href="{% url 'trades:relatorio_mensal' %}">
         <i class="bi bi-calendar3 me-2"></i>Rel. Mensal
       </a>
+      <a href="{% url 'trades:relatorio_anual' %}"
+       class="nav-link {% if request.resolver_match.url_name == 'relatorio_anual' %}active{% endif %}">
+      <i class="bi bi-calendar-range me-2"></i> Rel. Anual
+      </a>
     </li>
 
     <div class="nav-section-label" style="margin-top:12px;">Sistema</div>

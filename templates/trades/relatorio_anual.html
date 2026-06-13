@@ -1,0 +1,401 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Relatório Anual · Trader{% endblock %}
+{% block page_title %}Relatório Anual{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kpi-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .7px; color: var(--text-muted); margin-bottom: 4px;
+  }
+  .kpi-value {
+    font-family: var(--font-mono); font-size: 22px; font-weight: 700;
+    color: var(--text-primary); line-height: 1.1;
+  }
+  .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+  .card-kpi {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+  }
+  .mini-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--font-mono); }
+  .mini-table th { color: var(--text-muted); font-weight: 700; text-transform: uppercase;
+    letter-spacing: .5px; padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+  .mini-table td { padding: 6px 8px; color: var(--text-dim);
+    border-bottom: 1px solid rgba(48,54,61,0.4); }
+  .mini-table tr:last-child td { border-bottom: none; }
+  .val-pos { color: var(--positive); font-weight: 600; }
+  .val-neg { color: var(--negative); font-weight: 600; }
+  .val-warn { color: var(--warning); font-weight: 600; }
+  .print-footer { display: none; }
+
+  @media print {
+    #sidebar, #topbar, form, .d-print-none { display: none !important; }
+    body { background: #fff !important; color: #0d1117 !important;
+           font-size: 10pt; margin: 0; padding: 0; }
+    #main-wrapper, #page-content {
+      margin-left: 0 !important; padding: 16px !important; width: 100% !important;
+    }
+    .chart-card, .card-kpi {
+      background: #fff !important; border: 1px solid #dee2e6 !important;
+      border-radius: 6px; page-break-inside: avoid; break-inside: avoid;
+      margin-bottom: 12px;
+    }
+    .kpi-label { color: #6c757d !important; }
+    .kpi-value { color: #0d1117 !important; font-size: 16pt; }
+    .kpi-sub   { color: #6c757d !important; }
+    .val-pos { color: #1a7a4a !important; }
+    .val-neg { color: #c0392b !important; }
+    .val-warn { color: #b7860b !important; }
+    .mini-table th { background: #f1f3f5 !important; color: #495057 !important;
+                     border-bottom: 1px solid #dee2e6 !important; }
+    .mini-table td { color: #0d1117 !important;
+                     border-bottom: 1px solid #f1f3f5 !important; }
+    .js-plotly-plot, .plotly-graph-div { background: #fff !important; }
+    .row { break-inside: avoid; }
+    .col-6, .col-xl-3, .col-xl-4, .col-12 {
+      width: 100% !important; max-width: 100% !important; flex: none !important;
+    }
+    .print-header { display: block !important; }
+    .print-footer { display: block !important; text-align: center;
+      font-size: 8pt; color: #adb5bd; margin-top: 24px;
+      border-top: 1px solid #dee2e6; padding-top: 8px; }
+  }
+  .print-header { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# Cabeçalho de impressão #}
+<div class="print-header mb-3"
+     style="border-bottom:2px solid #0d1117;padding-bottom:10px;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+    <div>
+      <div style="font-size:18pt;font-weight:700;">Relatório Anual de Performance</div>
+      <div style="font-size:11pt;color:#495057;">Ano {{ ano_sel }}</div>
+    </div>
+    <div style="text-align:right;font-size:9pt;color:#6c757d;">
+      Trader Dashboard · Gerado em {% now "d/m/Y" %}
+      {% if capital_inicial > 0 %}
+        <br>Capital inicial: R$ {{ capital_inicial|floatformat:2 }}
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if sem_dados %}
+  <div style="text-align:center;padding:80px;color:var(--text-muted);">
+    <i class="bi bi-inbox" style="font-size:40px;display:block;margin-bottom:12px;"></i>
+    <p>Nenhuma operação importada ainda.</p>
+  </div>
+
+{% else %}
+
+{# Seletor de ano + botão PDF #}
+<form method="get" class="mb-4 d-print-none">
+  <div class="d-flex align-items-center gap-3">
+    <label class="text-muted small mb-0">Ano:</label>
+    <select name="ano" class="form-select form-select-sm w-auto bg-dark text-light border-secondary"
+            onchange="this.form.submit()">
+      {% for ano in anos_disponiveis %}
+        <option value="{{ ano }}" {% if ano == ano_sel %}selected{% endif %}>{{ ano }}</option>
+      {% endfor %}
+    </select>
+    <button type="button" onclick="window.print()"
+            class="btn btn-sm btn-outline-secondary ms-auto"
+            style="font-size:11px;padding:3px 10px;">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Exportar PDF
+    </button>
+  </div>
+</form>
+
+{% if sem_dados_ano %}
+  <div style="text-align:center;padding:60px;color:var(--text-muted);">
+    <i class="bi bi-calendar-x" style="font-size:36px;display:block;margin-bottom:10px;"></i>
+    <p>Nenhuma operação encontrada para {{ ano_sel }}.</p>
+  </div>
+
+{% else %}
+
+{# ── KPIs do ano — linha 1 ── #}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-xl-3">
+    <div class="card-kpi">
+      <div class="kpi-label">Resultado Total</div>
+      <div class="kpi-value {% if resultado_ano >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        {% if resultado_ano >= 0 %}+{% endif %}R$ {{ resultado_ano|floatformat:2 }}
+      </div>
+      <div class="kpi-sub">{{ pontos_ano|floatformat:0 }} pts</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-kpi">
+      <div class="kpi-label">Retorno %</div>
+      {% if retorno_pct_ano is not None %}
+        <div class="kpi-value {% if retorno_pct_ano >= 0 %}val-pos{% else %}val-neg{% endif %}">
+          {% if retorno_pct_ano >= 0 %}+{% endif %}{{ retorno_pct_ano|floatformat:2 }}%
+        </div>
+        <div class="kpi-sub">sobre capital inicial</div>
+      {% else %}
+        <div class="kpi-value" style="color:var(--text-muted);">—</div>
+        <div class="kpi-sub">configure o capital no Admin</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-kpi">
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value {% if em_ano >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        {{ win_rate_ano|floatformat:1 }}%
+      </div>
+      <div class="kpi-sub">{{ total_wins_ano }}W · {{ total_losses_ano }}L</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-kpi">
+      <div class="kpi-label">Drawdown Máx.</div>
+      <div class="kpi-value val-neg">-R$ {{ drawdown_ano|floatformat:2 }}</div>
+      <div class="kpi-sub">no ano</div>
+    </div>
+  </div>
+</div>
+
+{# ── KPIs do ano — linha 2 ── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <div class="card-kpi">
+      <div class="kpi-label">Operações</div>
+      <div class="kpi-value">{{ total_ops_ano }}</div>
+      <div class="kpi-sub">{{ dias_operados_ano }} pregões</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-kpi">
+      <div class="kpi-label">Expect. Matemática</div>
+      <div class="kpi-value {% if em_ano >= 0 %}val-pos{% else %}val-neg{% endif %}">
+        {% if em_ano >= 0 %}+{% endif %}R$ {{ em_ano|floatformat:2 }}
+      </div>
+      <div class="kpi-sub">por operação</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-kpi">
+      <div class="kpi-label">Payoff Ratio</div>
+      <div class="kpi-value {% if payoff_ano >= 1 %}val-pos{% else %}val-neg{% endif %}">
+        {{ payoff_ano|floatformat:2 }}
+      </div>
+      <div class="kpi-sub">ganho médio / perda média</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="card-kpi">
+      <div class="kpi-label">Score Comportamental</div>
+      <div class="kpi-value
+        {% if score_ano >= 60 %}val-pos{% elif score_ano >= 40 %}val-warn{% else %}val-neg{% endif %}">
+        {{ score_ano }}<span style="font-size:13px;color:var(--text-muted);">/100</span>
+      </div>
+      <div class="kpi-sub">{{ score_ano_av }} no ano</div>
+    </div>
+  </div>
+</div>
+
+{# ── Curva de capital anual ── #}
+<div class="chart-card mb-3">
+  <div class="chart-title"><i class="bi bi-graph-up me-1"></i>Curva de Capital — {{ ano_sel }}</div>
+  {% if grafico_capital_anual %}{{ grafico_capital_anual|safe }}{% endif %}
+</div>
+
+{# ── Resultado por mês + Score mensal ── #}
+<div class="row g-3 mb-3">
+  <div class="col-12 col-xl-7">
+    <div class="chart-card">
+      <div class="chart-title"><i class="bi bi-bar-chart me-1"></i>Resultado por Mês</div>
+      {% if grafico_barras_ano %}{{ grafico_barras_ano|safe }}{% endif %}
+    </div>
+  </div>
+  <div class="col-12 col-xl-5">
+    <div class="chart-card">
+      <div class="chart-title"><i class="bi bi-person-check me-1"></i>Score Comportamental Mensal</div>
+      {% if grafico_score_mensal %}{{ grafico_score_mensal|safe }}{% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Tabela mensal ── #}
+<div class="chart-card mb-3">
+  <div class="chart-title mb-3">
+    <i class="bi bi-table me-1"></i>Comparativo Mensal
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Mês</th>
+          <th class="text-end" style="text-align:right;">Resultado</th>
+          <th class="text-end" style="text-align:right;">Pts</th>
+          <th class="text-end" style="text-align:right;">Win Rate</th>
+          <th class="text-end" style="text-align:right;">Ops</th>
+          <th class="text-end" style="text-align:right;">EM</th>
+          <th class="text-end" style="text-align:right;">Payoff</th>
+          <th class="text-end" style="text-align:right;">Drawdown</th>
+          <th class="text-end" style="text-align:right;">Dias</th>
+          <th class="text-end" style="text-align:right;">Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in meses_ano %}
+        <tr>
+          <td style="font-weight:600;color:var(--text-primary);">{{ m.label }}</td>
+          <td style="text-align:right;">
+            <span class="{% if m.resultado >= 0 %}val-pos{% else %}val-neg{% endif %}">
+              {% if m.resultado >= 0 %}+{% endif %}R$ {{ m.resultado|floatformat:2 }}
+            </span>
+          </td>
+          <td style="text-align:right;color:var(--text-muted);">{{ m.pontos|floatformat:0 }}</td>
+          <td style="text-align:right;">
+            <span class="{% if m.win_rate >= 50 %}val-pos{% else %}val-neg{% endif %}">
+              {{ m.win_rate|floatformat:1 }}%
+            </span>
+          </td>
+          <td style="text-align:right;">{{ m.total_ops }}</td>
+          <td style="text-align:right;">
+            <span class="{% if m.em >= 0 %}val-pos{% else %}val-neg{% endif %}">
+              {% if m.em >= 0 %}+{% endif %}{{ m.em|floatformat:2 }}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <span class="{% if m.payoff >= 1 %}val-pos{% else %}val-neg{% endif %}">
+              {{ m.payoff|floatformat:2 }}
+            </span>
+          </td>
+          <td style="text-align:right;"><span class="val-neg">-{{ m.drawdown|floatformat:2 }}</span></td>
+          <td style="text-align:right;color:var(--text-muted);">{{ m.dias_operados }}</td>
+          <td style="text-align:right;">
+            <span class="{% if m.score >= 60 %}val-pos{% elif m.score >= 40 %}val-warn{% else %}val-neg{% endif %}"
+                  style="font-weight:700;">
+              {{ m.score }}
+            </span>
+            <span style="font-size:10px;color:var(--text-muted);">/100</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Top 5 melhores e piores dias ── #}
+<div class="row g-3 mb-3">
+  <div class="col-12 col-xl-6">
+    <div class="chart-card">
+      <div class="chart-title mb-2">
+        <i class="bi bi-trophy me-1" style="color:var(--positive);"></i>Top 5 Melhores Dias
+      </div>
+      <table class="mini-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th style="text-align:right;">Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in top5_melhores %}
+          <tr>
+            <td>{{ d.data }}</td>
+            <td style="text-align:right;">
+              <span class="val-pos">+R$ {{ d.resultado|floatformat:2 }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-12 col-xl-6">
+    <div class="chart-card">
+      <div class="chart-title mb-2">
+        <i class="bi bi-arrow-down-circle me-1" style="color:var(--negative);"></i>Top 5 Piores Dias
+      </div>
+      <table class="mini-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th style="text-align:right;">Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in top5_piores %}
+          <tr>
+            <td>{{ d.data }}</td>
+            <td style="text-align:right;">
+              <span class="val-neg">R$ {{ d.resultado|floatformat:2 }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Score comportamental do ano ── #}
+<div class="chart-card mb-3">
+  <div class="chart-title mb-3">
+    <i class="bi bi-person-check me-1"></i>Score Comportamental do Ano
+  </div>
+  <div class="row g-3 align-items-center">
+    <div class="col-12 col-xl-3">
+      <div class="card-kpi">
+        <div class="kpi-label">Score Anual</div>
+        <div class="kpi-value
+          {% if score_ano >= 60 %}val-pos{% elif score_ano >= 40 %}val-warn{% else %}val-neg{% endif %}"
+             style="font-size:36px;">
+          {{ score_ano }}
+        </div>
+        <div class="kpi-sub">{{ score_ano_av }} · de 100 pontos</div>
+      </div>
+    </div>
+    <div class="col-12 col-xl-9">
+      <div style="background:var(--bg-card);border:1px solid var(--border);
+                  border-radius:var(--radius);padding:14px 16px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:.7px;color:var(--text-muted);margin-bottom:10px;">
+          Por indicador
+        </div>
+        {% for item in score_ano_detalhes %}
+        <div style="margin-bottom:9px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+            <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);">
+              {{ item.label }}
+            </span>
+            <span style="font-size:11px;font-family:var(--font-mono);font-weight:700;
+              color:{% if item.pontos >= 16 %}var(--positive){% elif item.pontos >= 8 %}var(--warning){% else %}var(--negative){% endif %};">
+              {{ item.pontos }}/{{ item.max }}
+            </span>
+          </div>
+          <div style="background:var(--bg-input);border-radius:4px;height:5px;overflow:hidden;">
+            <div style="height:100%;
+              width:{% widthratio item.pontos item.max 100 %}%;
+              border-radius:4px;
+              background:{% if item.pontos >= 16 %}var(--positive){% elif item.pontos >= 8 %}var(--warning){% else %}var(--negative){% endif %};">
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Rodapé de impressão #}
+<div class="print-footer">
+  Trader Dashboard · Relatório Anual {{ ano_sel }} ·
+  Gerado em {% now "d/m/Y H:i" %} ·
+  {{ total_ops_ano }} operações · {{ dias_operados_ano }} pregões
+</div>
+
+{% endif %}{# /sem_dados_ano #}
+{% endif %}{# /sem_dados #}
+{% endblock %}

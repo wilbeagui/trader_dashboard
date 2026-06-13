@@ -47,6 +47,20 @@ operacional.
 - Multi-usuário e Autenticação ← IMPLEMENTADO (Passo 18 — Abordagem A)
 - Metas e Alertas ← IMPLEMENTADO (Passo 20)
 - Relatório Comportamental Periódico (PDF) ← IMPLEMENTADO (Passo 24)
+- `apps/trades/views.py` → nova view relatorio_anual() com @login_required;
+  helper interno _metricas_mes_anual() calcula métricas + score comportamental
+  por mês; _calcular_comportamental() reutilizado para score do ano inteiro;
+  gráficos: curva de capital anual, barras de resultado por mês,
+  evolução do score comportamental mensal (Passo 25)
+- `apps/trades/urls.py` → rota /relatorio-anual/ adicionada (Passo 25)
+- `templates/base.html` → link "Rel. Anual" adicionado no sidebar após
+  Rel. Mensal; ícone bi-calendar-range (Passo 25)
+- `templates/trades/relatorio_anual.html` → novo template: seletor de ano;
+  botão Exportar PDF (window.print()); 8 KPIs anuais em 2 linhas; curva de
+  capital anual; gráfico de resultado por mês; gráfico de score mensal;
+  tabela comparativa mensal com score; top 5 melhores/piores dias;
+  card de score anual com detalhamento por indicador; CSS @media print
+  integrado; cabeçalho e rodapé de impressão (Passo 25)
 
 ## Stack
 - Python 3.12.7 + Django 6.0.5
@@ -1135,35 +1149,46 @@ do template em um único lugar.
 
 ---
 
-### PASSO 25 — Relatório Consolidado Anual (PDF) ★★★☆☆
-**Objetivo:** Documento anual completo de performance — serve para
-análise pessoal, planejamento e evolução. NÃO inclui cálculo de taxas,
-corretagem ou DARF — para fins fiscais o trader deve consultar as notas
-de corretagem emitidas pela corretora.
+### PASSO 25 — Relatório Consolidado Anual (PDF) ★★★☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- View `relatorio_anual()` → `/relatorio-anual/`: filtra operações por
+  ano selecionado via GET; padrão = ano atual via datetime.now(tz=TZ_BR)
+- Query com campos: abertura, fechamento, resultado_operacao,
+  resultado_operacao_pontos, mep, men, ativo, total_acumulado
+  (total_acumulado obrigatório para _grafico_capital())
+- Métricas anuais globais: resultado, pontos, win rate, EM, payoff,
+  drawdown, dias operados, retorno % sobre capital
+- Helper interno `_metricas_mes_anual(df_m)`: calcula métricas + score
+  comportamental (revenge, overtrading, MEP, MEN, consistência) para
+  cada mês — sem queries adicionais, tudo em memória sobre o df do ano
+- Score do ano inteiro via `_calcular_comportamental(df, params)` —
+  reutiliza o helper existente sem duplicar código
+- Top 5 melhores e piores dias via groupby('data') + nlargest/nsmallest
+- 3 gráficos: curva de capital anual (_grafico_capital reutilizado),
+  barras de resultado por mês, evolução do score comportamental mensal
+  (barras coloridas: verde >= 60, amarelo >= 40, vermelho < 40)
+  com linha de referência tracejada em 60 (Bom)
+- Tabela comparativa mensal: resultado, pts, win rate, ops, EM, payoff,
+  drawdown, dias, score — tudo calculado por _metricas_mes_anual()
+- Exportação PDF via window.print() — mesmo padrão dos Passos 16 e 24
+- CSS @media print integrado no {% block extra_head %}: oculta sidebar,
+  topbar, formulários; adapta cores para papel branco; print-header e
+  print-footer visíveis apenas na impressão
+- Estados tratados: sem_dados (nenhuma op no banco), sem_dados_ano
+  (nenhuma op no ano selecionado)
 
-**Seções do relatório:**
-- Cabeçalho com ano, capital inicial e instrumento operado
-- Resumo do ano: resultado bruto total, pontos, dias operados,
-  win rate, EM, drawdown máximo
-- Curva de capital anual
-- Tabela mensal comparativa (os 12 meses com deltas)
-- Melhores e piores meses
-- Evolução do score comportamental mês a mês (quando houver dados)
-- Análise por setup no acumulado do ano (quando houver journal)
-- Top 5 melhores e piores dias do ano
-- Exportação via window.print() — mesmo padrão dos Passos 16 e 24
+**Bug corrigido durante implementação:**
+- KeyError 'total_acumulado': campo não incluído em campos[] da query;
+  corrigido adicionando 'total_acumulado' à lista de campos
 
-**Nota sobre dados fiscais:** o CSV do Profitchart contém apenas
-resultados brutos de execução — sem taxas, corretagem ou emolumentos
-da B3. Qualquer cálculo de resultado líquido ou DARF requereria
-integração com as notas de corretagem da corretora, fora do escopo
-atual do app.
+**Nota sobre dados fiscais:** relatório contém apenas resultados brutos
+de execução — sem taxas, corretagem ou emolumentos. Para fins fiscais
+o trader deve consultar as notas de corretagem da corretora.
 
-**Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view relatorio_anual()
-- `apps/trades/urls.py` → rota /relatorio-anual/
-- `templates/trades/relatorio_anual.html` → template com @media print
-- `templates/base.html` → link no sidebar
+**Arquivos alterados/criados:**
+`apps/trades/views.py`, `apps/trades/urls.py`, `templates/base.html`,
+`templates/trades/relatorio_anual.html` (novo)
+**Sem migração de banco. Sem nova dependência.**
 
 ---
 
@@ -1176,7 +1201,7 @@ Fase 2 — Diferencial competitivo:
   ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → ~~Passo 10~~ ✅ → ~~Passo 14~~ ✅ → ~~Passo 17~~ ✅
 
 Fase 3 — Visão de negócio:
-  ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → ~~Passo 16~~ ✅ → ~~Passo 24~~ ✅ → Passo 25
+  ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → ~~Passo 16~~ ✅ → ~~Passo 24~~ ✅ → ~~Passo 25~~ ✅
 
 Fase 4 — Refinamentos comportamentais:
   ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → ~~Passo 13~~ ✅ → ~~Passo 15~~ ✅

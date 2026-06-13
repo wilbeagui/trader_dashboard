@@ -2566,3 +2566,330 @@ def relatorio_mensal(request):
         'todos_meses': todos_meses,
         'capital_inicial': float(params.capital_inicial) if params.capital_inicial else 0,
     })
+
+
+@login_required
+def relatorio_anual(request):
+    """Relatório consolidado anual de performance."""
+    params = ParametrosTrader.carregar()
+    capital_inicial = float(params.capital_inicial)
+
+    # Ano selecionado via GET; padrão: ano atual
+    from datetime import datetime
+    ano_atual = datetime.now(tz=TZ_BR).year
+    try:
+        ano_sel = int(request.GET.get('ano', ano_atual))
+    except (ValueError, TypeError):
+        ano_sel = ano_atual
+
+    # Todos os anos disponíveis no banco
+    todas_abertura = Operacao.objects.values_list('abertura', flat=True)
+    if not todas_abertura.exists():
+        return render(request, 'trades/relatorio_anual.html', {
+            'sem_dados': True,
+            'anos_disponiveis': [],
+            'ano_sel': ano_sel,
+        })
+
+    anos_disponiveis = sorted(set(
+        pd.to_datetime(list(todas_abertura), utc=True)
+        .tz_convert(TZ_BR)
+        .year.tolist()
+    ), reverse=True)
+
+    # Carrega operações do ano selecionado
+    campos = [
+        'abertura', 'fechamento', 'resultado_operacao',
+        'resultado_operacao_pontos', 'mep', 'men', 'ativo',
+        'total_acumulado',
+    ]
+    qs = Operacao.objects.filter(
+        abertura__year=ano_sel
+    ).order_by('abertura').values(*campos)
+
+    if not qs.exists():
+        return render(request, 'trades/relatorio_anual.html', {
+            'sem_dados': False,
+            'sem_dados_ano': True,
+            'anos_disponiveis': anos_disponiveis,
+            'ano_sel': ano_sel,
+        })
+
+    df = pd.DataFrame(list(qs))
+    df['abertura'] = pd.to_datetime(
+        df['abertura'], utc=True).dt.tz_convert(TZ_BR)
+    df['fechamento'] = pd.to_datetime(
+        df['fechamento'], utc=True).dt.tz_convert(TZ_BR)
+    for col in ['resultado_operacao', 'resultado_operacao_pontos', 'mep', 'men']:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    df['ano_mes'] = df['abertura'].dt.to_period('M')
+    df['data'] = df['abertura'].dt.date
+
+    # ── Métricas anuais globais ─────────────────────────────────
+    total_ops_ano = len(df)
+    total_wins_ano = int((df['resultado_operacao'] > 0).sum())
+    total_losses_ano = int((df['resultado_operacao'] < 0).sum())
+    win_rate_ano = round(total_wins_ano / total_ops_ano * 100, 1)
+    resultado_ano = round(float(df['resultado_operacao'].sum()), 2)
+    pontos_ano = round(float(df['resultado_operacao_pontos'].sum()), 0)
+    dias_operados_ano = df['data'].nunique()
+
+    win_vals = df.loc[df['resultado_operacao'] > 0, 'resultado_operacao']
+    loss_vals = df.loc[df['resultado_operacao'] < 0, 'resultado_operacao']
+    avg_win = float(win_vals.mean()) if len(win_vals) else 0
+    avg_loss = float(loss_vals.mean()) if len(loss_vals) else 0
+    payoff_ano = round(abs(avg_win / avg_loss), 2) if avg_loss != 0 else 0
+    em_ano = round(
+        (win_rate_ano / 100 * avg_win) +
+        ((1 - win_rate_ano / 100) * avg_loss), 2
+    )
+
+    # Drawdown máximo do ano
+    df_ord = df.sort_values('abertura').copy()
+    df_ord['acum'] = df_ord['resultado_operacao'].cumsum()
+    df_ord['pico'] = df_ord['acum'].cummax()
+    drawdown_ano = round(float((df_ord['pico'] - df_ord['acum']).max()), 2)
+
+    retorno_pct_ano = round(resultado_ano / capital_inicial * 100, 2) \
+        if capital_inicial > 0 else None
+
+    # ── Métricas por mês (reaproveita lógica de _metricas_mes) ──
+    def _metricas_mes_anual(df_m):
+        total_ops = len(df_m)
+        if total_ops == 0:
+            return None
+        wins = (df_m['resultado_operacao'] > 0).sum()
+        losses = (df_m['resultado_operacao'] < 0).sum()
+        win_rate = round(wins / total_ops * 100, 1)
+        resultado = round(float(df_m['resultado_operacao'].sum()), 2)
+        pontos = round(float(df_m['resultado_operacao_pontos'].sum()), 0)
+        w_vals = df_m.loc[df_m['resultado_operacao'] > 0, 'resultado_operacao']
+        l_vals = df_m.loc[df_m['resultado_operacao'] < 0, 'resultado_operacao']
+        avg_w = float(w_vals.mean()) if len(w_vals) else 0
+        avg_l = float(l_vals.mean()) if len(l_vals) else 0
+        payoff = round(abs(avg_w / avg_l), 2) if avg_l != 0 else 0
+        em = round((win_rate / 100 * avg_w) +
+                   ((1 - win_rate / 100) * avg_l), 2)
+
+        df_o = df_m.sort_values('abertura').copy()
+        df_o['acum'] = df_o['resultado_operacao'].cumsum()
+        df_o['pico'] = df_o['acum'].cummax()
+        drawdown = round(float((df_o['pico'] - df_o['acum']).max()), 2)
+
+        dias_op = df_m['data'].nunique()
+        dias_res = df_m.groupby('data')['resultado_operacao'].sum()
+
+        # Score comportamental do mês
+        # Revenge
+        df_ms = df_m.sort_values('abertura').reset_index(drop=True)
+        limiar_min = params.tempo_minimo_entre_trades
+        n_revenge = 0
+        for i in range(1, len(df_ms)):
+            if df_ms.iloc[i-1]['resultado_operacao'] >= 0:
+                continue
+            diff = (df_ms.iloc[i]['abertura'] -
+                    df_ms.iloc[i-1]['abertura']).total_seconds() / 60
+            if diff < limiar_min:
+                n_revenge += 1
+        rev_pct = round(n_revenge / (total_ops - 1) * 100, 1) \
+            if total_ops > 1 else 0.0
+        if rev_pct == 0:
+            s_rev = 20
+        elif rev_pct < 5:
+            s_rev = 15
+        elif rev_pct < 15:
+            s_rev = 8
+        else:
+            s_rev = 0
+
+        # Overtrading
+        limiar_ops = params.max_operacoes_dia
+        ops_dia = df_m.groupby('data')['resultado_operacao'].count()
+        n_ot = int((ops_dia > limiar_ops).sum())
+        if n_ot == 0:
+            s_ot = 20
+        elif n_ot <= 2:
+            s_ot = 15
+        elif n_ot <= 5:
+            s_ot = 8
+        else:
+            s_ot = 0
+
+        # MEP
+        df_w = df_m[(df_m['resultado_operacao'] > 0) & (df_m['mep'] > 0)]
+        aprov = round(float(
+            (df_w['resultado_operacao'] / df_w['mep'] * 100).mean()
+        ), 1) if not df_w.empty else None
+        if aprov is None:
+            s_mep = 0
+        elif aprov >= 70:
+            s_mep = 20
+        elif aprov >= 40:
+            s_mep = 12
+        elif aprov >= 20:
+            s_mep = 6
+        else:
+            s_mep = 0
+
+        # MEN
+        df_l = df_m[(df_m['resultado_operacao'] < 0) & (df_m['men'] < 0)]
+        men_r = round(float(
+            (df_l['men'].abs() / df_l['resultado_operacao'].abs() * 100).mean()
+        ), 1) if not df_l.empty else None
+        if men_r is None:
+            s_men = 0
+        elif men_r <= 110:
+            s_men = 20
+        elif men_r <= 150:
+            s_men = 12
+        elif men_r <= 200:
+            s_men = 6
+        else:
+            s_men = 0
+
+        # Consistência
+        pct_pos = round(
+            (dias_res > 0).sum() / len(dias_res) * 100, 1
+        ) if len(dias_res) else 0.0
+        if pct_pos >= 60:
+            s_con = 20
+        elif pct_pos >= 40:
+            s_con = 12
+        elif pct_pos >= 20:
+            s_con = 6
+        else:
+            s_con = 0
+
+        score = s_rev + s_ot + s_mep + s_men + s_con
+        if score >= 80:
+            score_av = "Excelente"
+        elif score >= 60:
+            score_av = "Bom"
+        elif score >= 40:
+            score_av = "Regular"
+        else:
+            score_av = "Crítico"
+
+        return {
+            'total_ops':     total_ops,
+            'wins':          int(wins),
+            'losses':        int(losses),
+            'win_rate':      win_rate,
+            'resultado':     resultado,
+            'pontos':        pontos,
+            'payoff':        payoff,
+            'em':            em,
+            'drawdown':      drawdown,
+            'dias_operados': dias_op,
+            'melhor_dia':    round(float(dias_res.max()), 2),
+            'pior_dia':      round(float(dias_res.min()), 2),
+            'score':         score,
+            'score_av':      score_av,
+        }
+
+    periodos = sorted(df['ano_mes'].unique())
+    meses_ano = []
+    for p in periodos:
+        df_m = df[df['ano_mes'] == p].copy()
+        m = _metricas_mes_anual(df_m)
+        if m:
+            m['label'] = p.to_timestamp().strftime('%b/%Y').capitalize()
+            meses_ano.append(m)
+
+    # ── Score comportamental do ano inteiro ─────────────────────
+    ind_ano = _calcular_comportamental(df, params)
+    score_ano = ind_ano.get('score_comportamental', 0)
+    score_ano_av = ind_ano.get('score_avaliacao', '—')
+    score_ano_cor = ind_ano.get('score_cor', 'blue')
+    score_ano_detalhes = ind_ano.get('score_detalhes', [])
+
+    # ── Top 5 melhores e piores dias ────────────────────────────
+    dias_resultado = df.groupby(
+        'data')['resultado_operacao'].sum().reset_index()
+    dias_resultado.columns = ['data', 'resultado']
+    dias_resultado['resultado'] = dias_resultado['resultado'].round(2)
+    top5_melhores = dias_resultado.nlargest(5, 'resultado').to_dict('records')
+    top5_piores = dias_resultado.nsmallest(5, 'resultado').to_dict('records')
+
+    # ── Gráfico curva de capital anual ───────────────────────────
+    grafico_capital_anual = _grafico_capital(df)
+
+    # ── Gráfico resultado por mês ────────────────────────────────
+    labels_m = [m['label'] for m in meses_ano]
+    valores_m = [m['resultado'] for m in meses_ano]
+    cores_m = [COR_POSITIVO if v >= 0 else COR_NEGATIVO for v in valores_m]
+    scores_m = [m['score'] for m in meses_ano]
+
+    fig_barras = go.Figure()
+    fig_barras.add_trace(go.Bar(
+        x=labels_m,
+        y=valores_m,
+        marker_color=cores_m,
+        hovertemplate='%{x}<br>R$ %{y:,.2f}<extra></extra>',
+    ))
+    fig_barras.update_layout(**_layout_base(
+        height=240,
+        xaxis=dict(type='category', gridcolor=COR_GRADE,
+                   showgrid=False, tickangle=-45, tickfont=dict(size=9)),
+        yaxis=dict(gridcolor=COR_GRADE, zerolinecolor=COR_GRADE,
+                   tickprefix='R$ ', tickformat=',.0f'),
+    ))
+    grafico_barras_ano = _to_html(fig_barras)
+
+    # ── Gráfico evolução score comportamental mensal ─────────────
+    cores_score = [
+        COR_POSITIVO if s >= 60 else (COR_AMARELO if s >= 40 else COR_NEGATIVO)
+        for s in scores_m
+    ]
+    fig_score = go.Figure()
+    fig_score.add_trace(go.Bar(
+        x=labels_m,
+        y=scores_m,
+        marker_color=cores_score,
+        hovertemplate='%{x}<br>Score: %{y}<extra></extra>',
+    ))
+    fig_score.add_hline(y=60, line_dash='dash', line_color=COR_AMARELO,
+                        line_width=1,
+                        annotation_text='60 (Bom)',
+                        annotation_font=dict(size=9, color=COR_AMARELO))
+    fig_score.update_layout(**_layout_base(
+        height=200,
+        xaxis=dict(type='category', gridcolor=COR_GRADE,
+                   showgrid=False, tickangle=-45, tickfont=dict(size=9)),
+        yaxis=dict(gridcolor=COR_GRADE, range=[0, 100], tickformat='d'),
+    ))
+    grafico_score_mensal = _to_html(fig_score)
+
+    return render(request, 'trades/relatorio_anual.html', {
+        'sem_dados':          False,
+        'sem_dados_ano':      False,
+        'anos_disponiveis':   anos_disponiveis,
+        'ano_sel':            ano_sel,
+        'capital_inicial':    capital_inicial,
+        # Métricas anuais
+        'total_ops_ano':      total_ops_ano,
+        'total_wins_ano':     total_wins_ano,
+        'total_losses_ano':   total_losses_ano,
+        'win_rate_ano':       win_rate_ano,
+        'resultado_ano':      resultado_ano,
+        'pontos_ano':         pontos_ano,
+        'dias_operados_ano':  dias_operados_ano,
+        'payoff_ano':         payoff_ano,
+        'em_ano':             em_ano,
+        'drawdown_ano':       drawdown_ano,
+        'retorno_pct_ano':    retorno_pct_ano,
+        # Score anual
+        'score_ano':          score_ano,
+        'score_ano_av':       score_ano_av,
+        'score_ano_cor':      score_ano_cor,
+        'score_ano_detalhes': score_ano_detalhes,
+        # Meses
+        'meses_ano':          meses_ano,
+        # Top dias
+        'top5_melhores':      top5_melhores,
+        'top5_piores':        top5_piores,
+        # Gráficos
+        'grafico_capital_anual':  grafico_capital_anual,
+        'grafico_barras_ano':     grafico_barras_ano,
+        'grafico_score_mensal':   grafico_score_mensal,
+    })
