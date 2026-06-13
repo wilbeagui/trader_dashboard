@@ -135,6 +135,168 @@
     font-size: 12px;
   }
   .empty-state i { font-size: 28px; display: block; margin-bottom: 8px; }
+
+
+  /* ── CSS de Impressão (Passo 24) ── */
+@media print {
+
+  /* Oculta elementos de navegação e interface */
+  #sidebar,
+  #topbar,
+  .filter-bar,
+  form,
+  .d-print-none,
+  .btn,
+  .btn-filter,
+  .btn-filter-clear,
+  .empty-state i { display: none !important; }
+
+  /* Layout da página impressa */
+  body {
+    background: #ffffff !important;
+    color: #0d1117 !important;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 10pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Remove offset do sidebar */
+  #main-wrapper,
+  #main-content,
+  main,
+  #page-content {
+    margin-left: 0 !important;
+    padding: 16px !important;
+    width: 100% !important;
+  }
+
+  /* Chart cards */
+  .chart-card {
+    background: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Section header */
+  .section-header {
+    border-bottom: 1px solid #dee2e6 !important;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+  .section-header .section-icon { display: none; }
+  .section-header .section-title {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #0d1117 !important;
+  }
+  .section-header .section-sub {
+    font-size: 9pt;
+    color: #6c757d !important;
+  }
+  .section-header .limiar-badge {
+    background: #f1f3f5 !important;
+    border: 1px solid #dee2e6 !important;
+    color: #495057 !important;
+  }
+
+  /* KPI cards */
+  .kpi-card {
+    background: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 6px;
+    padding: 10px 12px;
+    break-inside: avoid;
+  }
+  .kpi-card .kpi-label {
+    font-size: 8pt;
+    color: #6c757d !important;
+  }
+  .kpi-card .kpi-value {
+    font-size: 13pt;
+    color: #0d1117 !important;
+  }
+  .kpi-card .kpi-sub {
+    font-size: 8pt;
+    color: #6c757d !important;
+  }
+  .kpi-card .kpi-icon { display: none; }
+
+  /* Cores de resultado */
+  .kpi-card.pos .kpi-value { color: #1a7a4a !important; }
+  .kpi-card.neg .kpi-value { color: #c0392b !important; }
+  .kpi-card.warn .kpi-value { color: #b7860b !important; }
+  .val-pos { color: #1a7a4a !important; }
+  .val-neg { color: #c0392b !important; }
+  .val-warn { color: #b7860b !important; }
+
+  /* Mini tabelas */
+  .mini-table {
+    font-size: 8pt;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .mini-table th {
+    background: #f1f3f5 !important;
+    color: #495057 !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    padding: 4px 6px;
+  }
+  .mini-table td {
+    color: #0d1117 !important;
+    border-bottom: 1px solid #f1f3f5 !important;
+    padding: 4px 6px;
+  }
+
+  /* Bloco de interpretação textual */
+  div[style*="bg-input"],
+  div[style*="var(--bg-input)"] {
+    background: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    color: #0d1117 !important;
+    border-radius: 6px;
+  }
+
+  /* Gráficos Plotly — fundo branco */
+  .js-plotly-plot,
+  .plotly-graph-div {
+    background: #ffffff !important;
+  }
+
+  /* Barra de progresso do score */
+  div[style*="var(--bg-input)"] div {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Row e colunas */
+  .row { break-inside: avoid; }
+  .col-6, .col-xl-3, .col-xl-4, .col-xl-5,
+  .col-12, .col-xl-8 {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+  }
+
+  /* Rodapé de impressão */
+  .print-footer {
+    display: block !important;
+    text-align: center;
+    font-size: 8pt;
+    color: #adb5bd;
+    margin-top: 24px;
+    border-top: 1px solid #dee2e6;
+    padding-top: 8px;
+  }
+}
+
+/* Rodapé visível só na impressão */
+.print-footer { display: none; }
+
 </style>
 {% endblock %}
 
@@ -162,6 +324,11 @@
       <a href="{% url 'trades:comportamental' %}" class="btn-filter-clear">
         <i class="bi bi-x"></i> Limpar
       </a>
+      <button type="button" onclick="window.print()"
+              class="btn-filter-clear d-print-none"
+              style="display:inline-flex;align-items:center;gap:6px;">
+        <i class="bi bi-file-earmark-pdf"></i> Exportar PDF
+      </button>
     </div>
   </div>
 </form>
@@ -176,6 +343,28 @@
   </div>
 
 {% else %}
+
+{# Cabeçalho visível apenas na impressão #}
+<div class="d-none d-print-block mb-3"
+     style="border-bottom:2px solid #0d1117;padding-bottom:10px;margin-bottom:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+    <div>
+      <div style="font-size:18pt;font-weight:700;color:#0d1117;">
+        Relatório Comportamental
+      </div>
+      <div style="font-size:11pt;color:#495057;">
+        {% if data_inicio or data_fim %}
+          {{ data_inicio|default:"início" }} até {{ data_fim|default:"hoje" }}
+        {% else %}
+          Todos os períodos
+        {% endif %}
+      </div>
+    </div>
+    <div style="text-align:right;font-size:9pt;color:#6c757d;">
+      Trader Dashboard · Gerado em {% now "d/m/Y" %}
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════════════
      SCORE COMPORTAMENTAL CONSOLIDADO (Passo 14)
@@ -923,6 +1112,15 @@
     {{ grafico_histograma_duracao|safe }}
   {% endif %}
 
+</div>
+
+{# Rodapé visível apenas na impressão #}
+<div class="print-footer">
+  Trader Dashboard · Relatório Comportamental ·
+  Gerado em {% now "d/m/Y H:i" %}
+  {% if data_inicio or data_fim %}
+    · {{ data_inicio|default:"início" }} → {{ data_fim|default:"hoje" }}
+  {% endif %}
 </div>
 
 {% endif %}

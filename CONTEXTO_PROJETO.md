@@ -46,6 +46,7 @@ operacional.
 - Relatório exportável em PDF ← IMPLEMENTADO (Passo 16)
 - Multi-usuário e Autenticação ← IMPLEMENTADO (Passo 18 — Abordagem A)
 - Metas e Alertas ← IMPLEMENTADO (Passo 20)
+- Relatório Comportamental Periódico (PDF) ← IMPLEMENTADO (Passo 24)
 
 ## Stack
 - Python 3.12.7 + Django 6.0.5
@@ -288,7 +289,11 @@ nova migração gerada pelo makemigrations (Passo 20);
   relativo; card Avaliação usa revenge_avaliacao/revenge_cor do backend;
   seção "Correlação Overtrading × Revenge" adicionada no Passo 11 (seção 2b):
   3 KPIs (Pearson, % revenge dias normais, % revenge dias overtrading) +
-  bloco de interpretação textual automática gerado no backend
+  bloco de interpretação textual automática gerado no backend;
+  CSS @media print adicionado
+  ao {% block extra_head %} existente; botão "Exportar PDF" na filter bar
+  (d-print-none); cabeçalho d-none d-print-block com período e data de
+  geração; rodapé .print-footer com {% now %} (Passo 24);
 - `templates/trades/comparativo.html` → página de comparativo de períodos (Passo 12):
   seletor de datas para P1 e P2 com min/max dinâmico; 4 KPIs de resumo;
   gráfico de curvas sobrepostas (eixo X normalizado 0–100%); gráfico de barras
@@ -1101,25 +1106,32 @@ AttributeError ao chamar `datetime.now()` — corrigido para
 
 ---
 
-### PASSO 24 — Relatório Comportamental Periódico (PDF) ★★★☆☆
-**Objetivo:** Exportar PDF do relatório comportamental — o maior
-diferencial competitivo do app versus concorrentes no mercado brasileiro.
+### PASSO 24 — Relatório Comportamental Periódico (PDF) ★★★☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- CSS @media print adicionado dentro do {% block extra_head %} já existente
+  em comportamental.html — sem criar novo bloco
+- Elementos ocultos na impressão: sidebar, topbar, filter-bar, formulários,
+  botões, ícones dos kpi-card e section-header
+- Adaptações para impressão em papel branco:
+  - kpi-card: fundo #f8f9fa, borda #dee2e6, cores pos/neg/warn adaptadas
+  - mini-table: fundo #f1f3f5 no thead, bordas claras
+  - chart-card: fundo branco, borda #dee2e6, page-break-inside: avoid
+  - Gráficos Plotly: fundo branco forçado
+  - Colunas Bootstrap: width:100% na impressão (layout single-column)
+  - print-color-adjust: exact para preservar cores das barras de progresso
+- Botão "Exportar PDF" adicionado na filter bar ao lado do "Limpar",
+  com d-print-none e onclick="window.print()"
+- Cabeçalho d-none d-print-block: título "Relatório Comportamental",
+  período filtrado ou "Todos os períodos", data via {% now "d/m/Y" %}
+- Rodapé .print-footer: data/hora + período; inserido antes do último
+  {% endif %} do template (dentro do bloco {% if not sem_dados %})
 
-**Seções do relatório:**
-- Score comportamental consolidado (0–100) com barra visual
-- Detalhamento por indicador: revenge, overtrading, MEP, MEN, consistência
-- Correlação overtrading × revenge com interpretação textual
-- Tabela de episódios de revenge do período
-- Histograma de duração das operações
-- Evolução do score comportamental mês a mês (quando houver histórico)
+**Decisão técnica:** CSS de impressão adicionado ao {% block extra_head %}
+existente — evita duplicação de bloco e mantém toda a lógica de estilo
+do template em um único lugar.
 
-**Diferencial competitivo:** nenhum app brasileiro focado em B3/Profitchart
-oferece análise comportamental exportável em PDF.
-
-**Arquivos a criar/alterar:**
-- `apps/trades/views.py` → nova view exportar_pdf_comportamental()
-- `apps/trades/urls.py` → rota /exportar-pdf/comportamental/
-- `templates/trades/pdf_relatorio_comportamental.html` → template para impressão
+**Arquivos alterados:** `templates/trades/comportamental.html`
+**Sem nova view. Sem nova URL. Sem migração. Sem dependência nova.**
 
 ---
 
@@ -1158,7 +1170,7 @@ Fase 2 — Diferencial competitivo:
   ~~Passo 1~~ ✅ → ~~Passo 6~~ ✅ → ~~Passo 10~~ ✅ → ~~Passo 14~~ ✅ → ~~Passo 17~~ ✅
 
 Fase 3 — Visão de negócio:
-  ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → ~~Passo 16~~ ✅ → Passo 24 → Passo 25
+  ~~Passo 4~~ ✅ → ~~Passo 12~~ ✅ → ~~Passo 16~~ ✅ → ~~Passo 24~~ ✅ → Passo 25
 
 Fase 4 — Refinamentos comportamentais:
   ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → ~~Passo 13~~ ✅ → ~~Passo 15~~ ✅
