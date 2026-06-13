@@ -62,6 +62,7 @@ operacional.
   card de score anual com detalhamento por indicador; CSS @media print
   integrado; cabeçalho e rodapé de impressão (Passo 25)
 - Linha do Tempo Visual do Dia ← IMPLEMENTADO (Passo 21)
+- Dark/Light Mode ← IMPLEMENTADO (Passo 22)
 
 ## Stack
 - Python 3.12.7 + Django 6.0.5
@@ -288,7 +289,14 @@ nova migração gerada pelo makemigrations (Passo 20);
   resultado_operacao ← 'Res. Operação'; chamada corrigida na view importar():
   importar_csv(arquivo, arquivo.name) com retorno tratado como dict
 - `templates/base.html` → sidebar com todos os links de navegação incluindo Journal
-  e Rel. Mensal; .alert-warning e .val-warn no CSS global
+  e Rel. Mensal; .alert-warning e .val-warn no CSS global;
+  Dark/Light Mode (Passo 22): script de
+  inicialização antes do render (evita flash); paleta light adicionada
+  em html.light-mode com 17 variáveis CSS; botão toggle no topbar com
+  ícones bi-moon-stars/bi-sun; toggleTheme() com localStorage para
+  persistência; CSS de adaptação para elementos com cores hardcoded
+  (sidebar, topbar, nav-links, filter-bar, form-controls, chart-card,
+  card-dash, table-dark, offcanvas)
 - `templates/trades/dashboard.html` → filter bar; 2 linhas de cards (linha 1:
   Resultado Total com subtítulo pts, Win Rate, Retorno %, Drawdown Máx.;
   linha 2: Operações, Wins/Losses, EM, Payoff Ratio); 5 gráficos Plotly
@@ -335,6 +343,10 @@ nova migração gerada pelo makemigrations (Passo 20);
   visual idêntico ao app (dark mode, paleta Azul Meia-Noite)
 - `templates/base.html` → sidebar footer atualizado: exibe
   request.user.username + botão logout via POST /accounts/logout/ (Passo 18)
+- `templates/trades/journal.html` → todas as cores hardcoded substituídas
+  por variáveis CSS (Passo 22): bloco <style> completo refatorado;
+  setup-table com variáveis Bootstrap (--bs-table-bg, --bs-table-color);
+  botão limpar filtros; cores inline no tbody substituídas por var()
 
 ## Decisões tomadas
 - Usar SQLite no desenvolvimento por simplicidade
@@ -1140,9 +1152,38 @@ outros gráficos do projeto.
 
 ---
 
-### PASSO 22 — Dark/Light Mode ★★☆☆☆
-**Arquivos a alterar:**
-- `templates/base.html` → variáveis CSS, botão toggle, localStorage
+### PASSO 22 — Dark/Light Mode ★★☆☆☆ ✅ CONCLUÍDO
+**O que foi implementado:**
+- Paleta light adicionada em `html.light-mode` no base.html:
+  bg-base #f6f8fa, bg-card #ffffff, text-primary #1f2328,
+  positive #1a7a4a, negative #c0392b, accent-blue #0969da, etc.
+- Script de inicialização inline antes do primeiro CSS:
+  lê localStorage('trader-theme') e aplica classe light-mode no
+  <html> antes do render — evita flash de tema errado
+- Botão toggle no topbar: `toggleTheme()` alterna classe
+  html.light-mode, persiste em localStorage, troca ícone
+  bi-moon-stars ↔ bi-sun via updateThemeIcon()
+- CSS de adaptação no base.html para elementos com cores hardcoded:
+  sidebar, topbar, nav-links, filter-bar, form-controls, chart-card,
+  card-dash, table-dark, offcanvas — todos adaptados via
+  html.light-mode seletores
+- Gráficos Plotly adaptados automaticamente: paper_bgcolor e
+  plot_bgcolor são rgba(0,0,0,0) — herdam o fundo branco do
+  chart-card no light mode sem alteração de código
+- `journal.html` refatorado: bloco <style> completo substituído —
+  todas as 30+ cores hardcoded trocadas por variáveis CSS;
+  setup-table adaptada via --bs-table-bg/color/border-color para
+  sobrescrever variáveis internas do Bootstrap; botão limpar filtros
+  e cores inline do tbody corrigidos
+
+**Decisão técnica:** toggle via classe CSS em <html> + variáveis CSS
+escolhido sobre abordagem de dois arquivos CSS separados — uma única
+troca de classe propaga para todos os elementos que usam variáveis,
+sem reload de página e sem request ao servidor.
+
+**Arquivos alterados:** `templates/base.html`,
+`templates/trades/journal.html`
+**Sem migração. Sem nova URL. Sem nova dependência.**
 
 ---
 
@@ -1243,4 +1284,4 @@ Fase 5 — Infraestrutura para comercialização:
   ~~Passo 18~~ ✅ → Passo 19 → ~~Passo 20~~ ✅
 
 Fase 6 — Experiência e conveniência:
-  ~~Passo 21~~ ✅ → Passo 22 → Passo 23
+  ~~Passo 21~~ ✅ → ~~Passo 22~~ ✅ → Passo 23

@@ -3,80 +3,86 @@
 {% block title %}Journal de Operações{% endblock %}
 
 {% block content %}
+
 <style>
   /* ── Journal page styles ─────────────────────────────────────── */
   .journal-page { padding: 1.5rem 0; }
 
   /* Filter bar */
   .filter-bar {
-    background: #161b22;
-    border: 1px solid #30363d;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1rem 1.25rem;
     margin-bottom: 1.5rem;
   }
   .filter-bar .form-control,
   .filter-bar .form-select {
-    background: #0d1117;
-    border: 1px solid #30363d;
-    color: #b8c4ce;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
     font-size: .825rem;
   }
   .filter-bar .form-control:focus,
   .filter-bar .form-select:focus {
-    background: #0d1117;
-    border-color: #3fb68b;
-    color: #e6edf3;
-    box-shadow: 0 0 0 2px rgba(63,182,139,.15);
+    background: var(--bg-input);
+    border-color: var(--positive);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--positive-soft);
   }
-  .filter-bar label { color: #8b949e; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+  .filter-bar label {
+    color: var(--text-muted);
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
 
   /* Setup metrics table */
   .setup-card {
-    background: #161b22;
-    border: 1px solid #30363d;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     margin-bottom: 1.5rem;
     overflow: hidden;
   }
   .setup-card .card-header {
-    background: #0d1117;
-    border-bottom: 1px solid #30363d;
+    background: var(--bg-input);
+    border-bottom: 1px solid var(--border);
     padding: .75rem 1.25rem;
     font-size: .8rem;
     text-transform: uppercase;
     letter-spacing: .08em;
-    color: #8b949e;
+    color: var(--text-muted);
     font-weight: 600;
   }
   .setup-table th {
-    background: #0d1117;
-    color: #8b949e;
+    background: var(--bg-input);
+    color: var(--text-muted);
     font-size: .75rem;
     text-transform: uppercase;
     letter-spacing: .06em;
-    border-color: #30363d;
+    border-color: var(--border);
     padding: .6rem 1rem;
     font-weight: 500;
   }
   .setup-table td {
-    color: #b8c4ce;
+    color: var(--text-dim);
     font-size: .85rem;
-    border-color: #21262d;
+    border-color: var(--border-subtle);
     padding: .6rem 1rem;
     vertical-align: middle;
   }
-  .setup-table tbody tr:hover { background: rgba(255,255,255,.02); }
+  .setup-table tbody tr:hover { background: var(--bg-card-hover); }
 
   /* Journal list */
   .journal-card {
-    background: #161b22;
-    border: 1px solid #30363d;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     margin-bottom: .75rem;
     transition: border-color .18s;
   }
-  .journal-card:hover { border-color: #444c56; }
+  .journal-card:hover { border-color: var(--text-muted); }
   .journal-card .card-body { padding: 1rem 1.25rem; }
 
   .journal-header {
@@ -89,23 +95,23 @@
   .j-ativo {
     font-weight: 700;
     font-size: .95rem;
-    color: #e6edf3;
+    color: var(--text-primary);
     letter-spacing: .03em;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: var(--font-mono);
   }
-  .j-data { font-size: .78rem; color: #8b949e; }
+  .j-data { font-size: .78rem; color: var(--text-muted); }
   .j-resultado {
     font-size: .9rem;
     font-weight: 600;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     margin-left: auto;
   }
-  .j-resultado.pos { color: #3fb68b; }
-  .j-resultado.neg { color: #e05c5c; }
+  .j-resultado.pos { color: var(--positive); }
+  .j-resultado.neg { color: var(--negative); }
 
   .j-setup-badge {
-    background: rgba(63,182,139,.12);
-    color: #3fb68b;
+    background: var(--positive-soft);
+    color: var(--positive);
     border: 1px solid rgba(63,182,139,.25);
     font-size: .72rem;
     padding: .2rem .55rem;
@@ -119,17 +125,17 @@
     border-radius: 20px;
     font-weight: 500;
   }
-  .emocao-calmo     { background: rgba(63,182,139,.1);  color: #3fb68b; border: 1px solid rgba(63,182,139,.2); }
-  .emocao-confiante { background: rgba(56,139,253,.1);  color: #388bfd; border: 1px solid rgba(56,139,253,.2); }
-  .emocao-neutro    { background: rgba(184,196,206,.08); color: #8b949e; border: 1px solid rgba(184,196,206,.15); }
-  .emocao-ansioso   { background: rgba(210,153,34,.1);  color: #d2991e; border: 1px solid rgba(210,153,34,.2); }
-  .emocao-frustrado { background: rgba(224,92,92,.1);   color: #e05c5c; border: 1px solid rgba(224,92,92,.2); }
+  .emocao-calmo     { background: var(--positive-soft);      color: var(--positive);    border: 1px solid rgba(63,182,139,.2); }
+  .emocao-confiante { background: var(--accent-blue-soft);   color: var(--accent-blue); border: 1px solid rgba(56,139,253,.2); }
+  .emocao-neutro    { background: rgba(184,196,206,.08);     color: var(--text-muted);  border: 1px solid var(--border); }
+  .emocao-ansioso   { background: rgba(210,153,34,.1);       color: #d2991e;            border: 1px solid rgba(210,153,34,.2); }
+  .emocao-frustrado { background: var(--negative-soft);      color: var(--negative);    border: 1px solid rgba(224,92,92,.2); }
 
   .j-tags { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .35rem; }
   .j-tag {
     background: rgba(184,196,206,.07);
-    color: #8b949e;
-    border: 1px solid #30363d;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
     font-size: .7rem;
     padding: .15rem .45rem;
     border-radius: 20px;
@@ -140,14 +146,14 @@
     gap: 1rem;
     margin-top: .4rem;
   }
-  .j-qual-item { font-size: .78rem; color: #8b949e; }
-  .j-qual-item span { color: #b8c4ce; font-weight: 600; }
+  .j-qual-item { font-size: .78rem; color: var(--text-muted); }
+  .j-qual-item span { color: var(--text-dim); font-weight: 600; }
 
   .j-anotacao {
     margin-top: .5rem;
     font-size: .82rem;
-    color: #8b949e;
-    border-left: 2px solid #30363d;
+    color: var(--text-muted);
+    border-left: 2px solid var(--border);
     padding-left: .75rem;
     line-height: 1.5;
   }
@@ -158,15 +164,15 @@
     border-radius: 50%;
     margin-right: 3px;
   }
-  .qual-high   { background: #3fb68b; }
-  .qual-mid    { background: #d2991e; }
-  .qual-low    { background: #e05c5c; }
+  .qual-high { background: var(--positive); }
+  .qual-mid  { background: #d2991e; }
+  .qual-low  { background: var(--negative); }
 
   /* Empty state */
   .empty-state {
     text-align: center;
     padding: 3rem 1rem;
-    color: #8b949e;
+    color: var(--text-muted);
   }
   .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; display: block; opacity: .4; }
 
@@ -174,15 +180,26 @@
   .summary-strip {
     display: flex;
     gap: 1.5rem;
-    background: #161b22;
-    border: 1px solid #30363d;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: .85rem 1.25rem;
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
   }
-  .summary-item { font-size: .82rem; color: #8b949e; }
-  .summary-item strong { color: #e6edf3; font-size: .95rem; display: block; }
+  .summary-item { font-size: .82rem; color: var(--text-muted); }
+  .summary-item strong { color: var(--text-primary); font-size: .95rem; display: block; }
+
+  .setup-table tbody { background: var(--bg-card); }
+  .setup-table tbody tr { background: var(--bg-card); }
+  .setup-table tbody tr:hover { background: var(--bg-card-hover); }
+
+  html.light-mode .setup-table {
+  --bs-table-bg: var(--bg-card);
+  --bs-table-color: var(--text-dim);
+  --bs-table-border-color: var(--border-subtle);
+  --bs-table-hover-bg: var(--bg-card-hover);
+  }
 </style>
 
 <div class="journal-page">
@@ -238,7 +255,7 @@
         <button type="submit" class="btn btn-sm w-100" style="background:#3fb68b; color:#0d1117; font-weight:600;">
           <i class="bi bi-funnel-fill me-1"></i>Filtrar
         </button>
-        <a href="{% url 'trades:journal' %}" class="btn btn-sm" style="background:#21262d; color:#8b949e; border:1px solid #30363d;">
+        <a href="{% url 'trades:journal' %}" class="btn btn-sm" style="background:var(--bg-input); color:var(--text-muted); border:1px solid var(--border);">
           <i class="bi bi-x-lg"></i>
         </a>
       </div>
@@ -252,7 +269,7 @@
       <i class="bi bi-bar-chart-steps me-2"></i>Performance por Setup
     </div>
     <div class="table-responsive">
-      <table class="table table-sm mb-0 setup-table">
+      <table class="table table-sm mb-0 setup-table" style="background:var(--bg-card);color:var(--text-dim);">
         <thead>
           <tr>
             <th>Setup</th>
@@ -272,16 +289,16 @@
             </td>
             <td class="text-center">{{ m.total }}</td>
             <td class="text-center">
-              <span style="color:{% if m.win_rate >= 50 %}#3fb68b{% else %}#e05c5c{% endif %}; font-weight:600;">
+              <span style="color:{% if m.win_rate >= 50 %}var(--positive){% else %}var(--negative){% endif %}; font-weight:600;">
                 {{ m.win_rate }}%
               </span>
             </td>
             <td class="text-end" style="font-family:'JetBrains Mono',monospace; font-weight:600;
-              color:{% if m.resultado_total >= 0 %}#3fb68b{% else %}#e05c5c{% endif %};">
+              color:{% if m.resultado_total >= 0 %}var(--positive){% else %}var(--negative){% endif %};">
               R$ {{ m.resultado_total|floatformat:2 }}
             </td>
             <td class="text-end" style="font-family:'JetBrains Mono',monospace;
-              color:{% if m.media_resultado >= 0 %}#3fb68b{% else %}#e05c5c{% endif %};">
+              color:{% if m.media_resultado >= 0 %}var(--positive){% else %}var(--negative){% endif %};">
               R$ {{ m.media_resultado|floatformat:2 }}
             </td>
             <td class="text-center">
@@ -378,8 +395,8 @@
   {% else %}
   <div class="empty-state">
     <i class="bi bi-journal-x"></i>
-    <p style="font-size:.95rem; color:#8b949e;">Nenhuma anotação encontrada para os filtros selecionados.</p>
-    <p style="font-size:.82rem;">Adicione anotações na página <a href="{% url 'trades:operacoes' %}" style="color:#3fb68b;">Operações</a>.</p>
+    <p style="font-size:.95rem; color:var(--text-muted);">Nenhuma anotação encontrada para os filtros selecionados.</p>
+    <p style="font-size:.82rem;">Adicione anotações na página <a href="{% url 'trades:operacoes' %}" style="color:var(--positive);">Operações</a>.</p>
   </div>
   {% endif %}
 </div>
