@@ -44,6 +44,7 @@ operacional.
 - Score Comportamental Consolidado ← IMPLEMENTADO (Passo 14)
 - Histograma de Duração das Operações ← IMPLEMENTADO (Passo 15)
 - Relatório exportável em PDF ← IMPLEMENTADO (Passo 16)
+- Multi-usuário e Autenticação ← IMPLEMENTADO (Passo 18 — Abordagem A)
 
 ## Stack
 - Python 3.12.7 + Django 6.0.5
@@ -115,6 +116,9 @@ trader_dashboard/
 - `BASE_DIR`: Path(__file__).resolve().parent.parent.parent
 - `SECRET_KEY`: carregada do .env via python-decouple
 - `DEBUG`: carregado do .env via python-decouple
+- `LOGIN_URL`: /accounts/login/
+- `LOGIN_REDIRECT_URL`: / (dashboard)
+- `LOGOUT_REDIRECT_URL`: /accounts/login/
 
 ## Ambiente de desenvolvimento
 - Editor: VSCode com extensão Python
@@ -222,7 +226,8 @@ Observações do trader sobre o pregão como um todo.
 - `core/settings/base.py` → configurações comuns a todos os ambientes
 - `core/settings/development.py` → configurações de desenvolvimento
 - `core/settings/production.py` → configurações de produção (PostgreSQL)
-- `core/urls.py` → URLs principais, inclui apps.trades.urls com namespace 'trades'
+- `core/urls.py` → URLs principais; inclui apps.trades.urls com namespace
+  'trades'; inclui django.contrib.auth.urls em accounts/ (Passo 18)
 - `core/wsgi.py` → aponta para core.settings.development
 - `core/asgi.py` → aponta para core.settings.development
 - `manage.py` → aponta para core.settings.development
@@ -242,7 +247,8 @@ Observações do trader sobre o pregão como um todo.
   JournalOperacaoAdmin com filtros por emocao e setup;
   AnotacaoDiaAdmin com list_display (data_sessao, estado_emocional, score_dia,
   atualizado_em), list_filter por estado_emocional, ordering por -data_sessao
-- `apps/trades/views.py` → 9 views ativas + helpers de cálculo e gráficos;
+- `apps/trades/views.py` → 10 views ativas protegidas com @login_required
+  (Passo 18); + helpers de cálculo e gráficos;
   inclui _grafico_drawdown(df) adicionado no Passo 7;
   _calcular_comportamental() atualizado nos Passos 8, 11 e 14;
   _grafico_analise_setup/tag() e analise_setup() adicionados no Passo 10;
@@ -290,6 +296,10 @@ Observações do trader sobre o pregão como um todo.
   tabela histórica comparativa com delta mês a mês colorido (Passo 4)
 - `.env` → variáveis de ambiente (SECRET_KEY, DEBUG)
 - `.gitignore` → arquivos ignorados pelo Git
+- `templates/registration/login.html` → tela de login customizada com
+  visual idêntico ao app (dark mode, paleta Azul Meia-Noite)
+- `templates/base.html` → sidebar footer atualizado: exibe
+  request.user.username + botão logout via POST /accounts/logout/ (Passo 18)
 
 ## Decisões tomadas
 - Usar SQLite no desenvolvimento por simplicidade
@@ -973,12 +983,45 @@ manter a sobreposição após entender a lógica de leitura do gráfico
 
 ---
 
-### PASSO 18 — Multi-usuário e Autenticação ★★☆☆☆
-**Arquivos a criar/alterar:**
-- `apps/trades/models.py` → FK User em todos os models; ParametrosTrader vira OneToOne
-- `apps/trades/views.py` → @login_required; filtrar por request.user
-- `templates/` → login/logout/registro
-- `templates/base.html` → nome do usuário + logout no sidebar
+### PASSO 18 — Multi-usuário e Autenticação ★★☆☆☆ ✅ CONCLUÍDO
+**Abordagem implementada:** A — Autenticação simples (login único)
+Protege todas as páginas com @login_required sem separar dados por usuário.
+Ideal para fase de comercialização inicial com um usuário por instalação.
+
+**O que foi implementado:**
+- `core/urls.py`: `path('accounts/', include('django.contrib.auth.urls'))`
+  — ativa login, logout e demais URLs de auth do Django sem código extra
+- `core/settings/base.py`: LOGIN_URL, LOGIN_REDIRECT_URL,
+  LOGOUT_REDIRECT_URL configurados
+- `apps/trades/views.py`: import de `login_required` +
+  decorator `@login_required` aplicado nas 10 views ativas:
+  dashboard, operacoes, importar, dia, comportamental, journal,
+  salvar_journal, relatorio_mensal, analise_setup, comparativo
+- `templates/registration/login.html`: tela de login customizada;
+  dark mode com paleta do projeto; campos usuário e senha; mensagem
+  de erro em caso de credenciais inválidas; sem dependência de
+  formulário Django (campos HTML manuais com name="username/password")
+- `templates/base.html`: sidebar-footer exibe {{ request.user.username }}
+  + botão logout via form POST /accounts/logout/ com {% csrf_token %}
+- Superusuário criado via: python manage.py createsuperuser
+
+**Decisão arquitetural:** Abordagem A escolhida sobre Abordagem B
+(multi-usuário completo) pois:
+  1. Zero risco de regressão — models não foram alterados
+  2. Suficiente para comercialização inicial (1 usuário por instalação)
+  3. Abordagem B implementada quando houver demanda real de múltiplos
+     usuários na mesma instância
+
+**Migração futura para Abordagem B (multi-usuário):**
+  - Adicionar FK User em ImportacaoArquivo (ponto de entrada dos dados)
+  - Propagar filtro por usuario em todas as queries via importacao__usuario
+  - ParametrosTrader: trocar singleton pk=1 por OneToOneField(User)
+  - Criar página de configurações para o usuário editar seus parâmetros
+
+**Arquivos alterados/criados:**
+`core/urls.py`, `core/settings/base.py`, `apps/trades/views.py`,
+`templates/base.html`, `templates/registration/login.html` (novo)
+**Sem migração de banco. Sem alteração de models. Sem nova dependência.**
 
 ---
 
@@ -1079,7 +1122,7 @@ Fase 4 — Refinamentos comportamentais:
   ~~Passo 5~~ ✅ → ~~Passo 8~~ ✅ → ~~Passo 11~~ ✅ → ~~Passo 13~~ ✅ → ~~Passo 15~~ ✅
 
 Fase 5 — Infraestrutura para comercialização:
-  Passo 18 → Passo 19 → Passo 20
+  ~~Passo 18~~ ✅ → Passo 19 → Passo 20
 
 Fase 6 — Experiência e conveniência:
   Passo 21 → Passo 22 → Passo 23

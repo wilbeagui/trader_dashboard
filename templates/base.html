@@ -471,8 +471,23 @@
     </a>
   </div>
 
-  <div class="sidebar-footer">
+  <!-- <div class="sidebar-footer">
     <span class="status-dot"></span>SQLite · dev
+  </div> -->
+  
+  <div class="sidebar-footer">
+    <div style="margin-bottom:8px;">
+      <span class="status-dot"></span>
+      <span style="color:var(--text-muted);">{{ request.user.username }}</span>
+    </div>
+    <form method="post" action="/accounts/logout/">
+      {% csrf_token %}
+      <button type="submit"
+              style="background:none;border:none;padding:0;cursor:pointer;
+                     color:var(--text-muted);font-size:11px;font-family:var(--font-mono);">
+        <i class="bi bi-box-arrow-left me-1"></i>Sair
+      </button>
+    </form>
   </div>
 </nav>
 

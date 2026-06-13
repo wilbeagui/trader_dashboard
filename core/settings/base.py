@@ -39,6 +39,11 @@ INSTALLED_APPS = [
     "apps.trades",
 ]
 
+# Autenticação
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'        # após login → dashboard
+LOGOUT_REDIRECT_URL = '/accounts/login/'  # após logout → login
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

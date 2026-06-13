@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import pytz
 from django.core.paginator import Paginator
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.db.models import QuerySet
@@ -1298,6 +1299,7 @@ def _grafico_comparativo_barras(m1, m2) -> str:
 # Views
 # ──────────────────────────────────────────────
 
+@login_required
 def dashboard(request):
     data_inicio, data_fim, qs = _filtrar_operacoes(request)
     df = _qs_to_df(qs)
@@ -1370,6 +1372,7 @@ def dashboard(request):
     return render(request, "trades/dashboard.html", context)
 
 
+@login_required
 def operacoes(request):
     data_inicio, data_fim, qs = _filtrar_operacoes(request)
     instrumento = request.GET.get("instrumento", "").strip()
@@ -1494,6 +1497,7 @@ def operacoes(request):
     return render(request, "trades/operacoes.html", context)
 
 
+@login_required
 def importar(request):
     resultado = None
     erro = None
@@ -1576,6 +1580,7 @@ def importar(request):
     return render(request, "trades/importar.html", context)
 
 
+@login_required
 def dia(request):
 
     dias_disponiveis = Operacao.objects.dates("abertura", "day", order="DESC")
@@ -1768,6 +1773,7 @@ def dia(request):
     return render(request, "trades/dia.html", context)
 
 
+@login_required
 def comportamental(request):
     """
     Página de indicadores comportamentais.
@@ -1815,6 +1821,7 @@ def comportamental(request):
 
 # ─── JOURNAL ──────────────────────────────────────────────────────────────────
 
+@login_required
 def journal(request):
     """Página principal do journal com listagem e métricas por setup."""
     import pytz
@@ -1921,6 +1928,7 @@ def journal(request):
     return render(request, 'trades/journal.html', context)
 
 
+@login_required
 def salvar_journal(request, op_id):
     """Salva ou atualiza o journal de uma operação via POST."""
     import json
@@ -1956,6 +1964,7 @@ def salvar_journal(request, op_id):
     })
 
 
+@login_required
 def analise_setup(request):
     """
     Análise de performance agrupada por setup e por tag do Journal.
@@ -2127,6 +2136,7 @@ def analise_setup(request):
     return render(request, "trades/analise_setup.html", context)
 
 
+@login_required
 def comparativo(request):
     """
     Comparativo lado a lado de dois períodos definidos pelo usuário.
@@ -2278,6 +2288,7 @@ def comparativo(request):
     })
 
 
+@login_required
 def relatorio_mensal(request):
     """Visão consolidada por mês com comparativo mês a mês."""
     import calendar
